@@ -1,0 +1,113 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  create-release:
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create GitHub release
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --notes "" \
+            --latest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build:
+    needs: create-release
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: ubuntu-22.04
+          - platform: windows-latest
+          - platform: macos-latest
+
+    runs-on: ${{ matrix.platform }}
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+
+      - name: Download ffmpeg (Linux)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          bash scripts/download-ffmpeg.sh amd64
+          bash scripts/download-ffmpeg.sh arm64
+          bash scripts/download-ffmpeg.sh armv7l
+
+      - name: Download ffmpeg (macOS)
+        if: matrix.platform == 'macos-latest'
+        run: |
+          mkdir -p resources/arm64 resources/x64
+          brew install ffmpeg
+          cp "$(brew --prefix)/bin/ffmpeg"  resources/arm64/ffmpeg
+          cp "$(brew --prefix)/bin/ffprobe" resources/arm64/ffprobe
+          # download x64 static build for cross-packaging
+          curl -L "https://evermeet.cx/ffmpeg/getrelease/ffmpeg/zip" -o /tmp/ffmpeg-x64.zip
+          curl -L "https://evermeet.cx/ffmpeg/getrelease/ffprobe/zip" -o /tmp/ffprobe-x64.zip
+          unzip -o /tmp/ffmpeg-x64.zip -d resources/x64/
+          unzip -o /tmp/ffprobe-x64.zip -d resources/x64/
+
+      - name: Download ffmpeg (Windows)
+        if: matrix.platform == 'windows-latest'
+        shell: pwsh
+        run: |
+          $url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
+          Invoke-WebRequest $url -OutFile ffmpeg.zip
+          Expand-Archive ffmpeg.zip -DestinationPath ffmpeg-tmp
+          New-Item -ItemType Directory -Force -Path resources\x64
+          Copy-Item ffmpeg-tmp\ffmpeg-master-latest-win64-gpl\bin\ffmpeg.exe resources\x64\ffmpeg.exe
+          Copy-Item ffmpeg-tmp\ffmpeg-master-latest-win64-gpl\bin\ffprobe.exe resources\x64\ffprobe.exe
+
+      - name: Set version from tag
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          npm pkg set version="$VERSION"
+
+      - name: Install frontend dependencies
+        run: pnpm install
+
+      - name: Build app
+        run: pnpm build:backend && pnpm build
+
+      - name: Package and publish
+        run: pnpm exec electron-builder --publish always
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_LINK: ${{ secrets.APPLE_CERTIFICATE_P12 }}
+          CSC_KEY_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
