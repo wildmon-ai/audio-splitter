@@ -1,0 +1,45 @@
+# Dependencies
+node_modules/
+
+# Build output
+.cache/
+dist/
+dist-electron/
+release/
+build/audio-splitter-backend/
+
+# Legacy Python artifacts
+__pycache__/
+*.pyc
+
+# Legacy PyInstaller artifacts
+*.spec
+
+# Go backend binary
+dist-backend/
+
+# ffmpeg binaries (downloaded at build time)
+resources/ffmpeg
+resources/ffprobe
+resources/ffmpeg.exe
+resources/ffprobe.exe
+!resources/.gitkeep
+
+# Environment
+.env
+.env.local
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+audio-splitter-backend

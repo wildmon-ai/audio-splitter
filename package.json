@@ -1,0 +1,93 @@
+{
+  "name": "audio-splitter",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Audio file splitter into clips",
+  "author": {
+    "name": "ClayAssis",
+    "email": "claydsonassis@gmail.com"
+  },
+  "type": "module",
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "build:electron": "tsc -p tsconfig.electron.json && node scripts/write-electron-package.cjs",
+    "dev": "pnpm build:backend && concurrently \"vite\" \"pnpm build:electron && wait-on http://localhost:1420 && electron .\"",
+    "build": "vue-tsc --noEmit && vite build && pnpm build:electron",
+    "build:backend": "node scripts/build-backend.cjs",
+    "dist": "pnpm build:backend && pnpm build && electron-builder",
+    "preview": "vite preview",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "pinia": "^2",
+    "vue": "^3.4"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4",
+    "@types/node": "^25.9.2",
+    "@vitejs/plugin-vue": "^5",
+    "@vitest/ui": "^4.1.8",
+    "concurrently": "^9",
+    "electron": "^36",
+    "electron-builder": "^26",
+    "jsdom": "^29.1.1",
+    "tailwindcss": "^4",
+    "typescript": "^5",
+    "vite": "^6",
+    "vitest": "^2",
+    "vue-tsc": "^2",
+    "wait-on": "^8"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["electron"]
+  },
+  "build": {
+    "appId": "com.wildmon.audio-splitter",
+    "productName": "Audio Splitter",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**",
+      "dist-electron/**"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/${arch}/",
+        "to": ".",
+        "filter": [
+          "ffmpeg",
+          "ffprobe",
+          "ffmpeg.exe",
+          "ffprobe.exe"
+        ]
+      }
+    ],
+    "publish": {
+      "provider": "github",
+      "releaseType": "release"
+    },
+    "afterPack": "scripts/copy-backend.cjs",
+    "linux": {
+      "target": [
+        { "target": "AppImage", "arch": ["x64", "arm64", "armv7l"] },
+        { "target": "deb",      "arch": ["x64", "arm64", "armv7l"] }
+      ],
+      "icon": "build/icons",
+      "category": "AudioVideo"
+    },
+    "mac": {
+      "target": [
+        { "target": "dmg", "arch": ["x64", "arm64"] }
+      ],
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "notarize": true
+    },
+    "win": {
+      "target": "nsis"
+    }
+  }
+}
