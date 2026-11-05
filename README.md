@@ -347,6 +347,22 @@ Releases are triggered by pushing a `v*` tag. The release workflow (`.github/wor
 4. Uploads the installers to the draft via `electron-builder --publish always`. Only the macOS job receives the Apple signing and notarization secrets.
 5. Publishes the release once every platform has succeeded, so a failed build never shows up as the latest release.
 
+When a build fails for a reason outside the code (an Apple agreement to accept, a download that timed out), fix the cause and re-run only the failed jobs: on the run's page, **Re-run jobs → Re-run failed jobs**, or
+
+```bash
+gh run rerun <run-id> --failed    # find the run ID with: gh run list --workflow release.yml
+```
+
+The draft keeps the installers the other platforms already uploaded, and the release is published when the re-run succeeds.
+
+To release a newer commit under the same version instead, delete the draft and its tag first: the workflow stops when the release already exists.
+
+```bash
+gh release delete vX.Y.Z --yes --cleanup-tag
+git tag -d vX.Y.Z
+git tag vX.Y.Z && git push origin vX.Y.Z
+```
+
 ## Troubleshooting
 
 | Problem | Fix |
@@ -354,6 +370,8 @@ Releases are triggered by pushing a `v*` tag. The release workflow (`.github/wor
 | Build fails with `copy-backend: ffmpeg is not in the <arch> package` | Download ffmpeg for that CPU into `resources/<arch>/` (see [ffmpeg](#ffmpeg)). `pnpm dist` packages every CPU of the OS and needs all of them. |
 | Build fails with `copy-backend: …audio-splitter-backend-<arch> not found` | Run `pnpm build:backend:release`. `pnpm build:backend` only builds the development binary. |
 | `.deb` build fails with `Please specify project homepage` | electron-builder takes the homepage from the git remote. When building from a copy without `.git`, add `"homepage": "https://github.com/wildmon-ai/audio-splitter"` to `package.json`. |
+| macOS release job fails with `Failed to notarize via notarytool … HTTP status code: 403. A required agreement is missing or has expired` | Apple has updated an agreement the developer account must accept; the code needs no change. The account holder signs in at [developer.apple.com/account](https://developer.apple.com/account) and accepts it, then re-runs the failed jobs (see [Releasing](#releasing)). |
+| macOS release job fails with `SecKeychainUnlock: The user name or passphrase you entered is not correct` | electron-builder before 26.18 gives `security set-key-partition-list` the certificate's password instead of the keychain's, and macOS 26.6 runners reject it. Keep electron-builder at 26.18 or later. |
 | App exits with `The SUID sandbox helper binary was found, but is not configured correctly` | Ubuntu's AppArmor blocks Electron's sandbox for apps started from a folder or an AppImage. For local tests, start the app with `--no-sandbox`, or install the `.deb`. |
 | AppImage does not start (`libfuse.so.2` missing) | `sudo apt install libfuse2t64` (Ubuntu 24.04 and later) or `sudo apt install libfuse2`. |
 | `pnpm dev` shows `Processing engine not found … Run "pnpm build:backend"` | Run `pnpm build:backend` (`pnpm dev` does it when it starts). |
