@@ -21,9 +21,9 @@ Download the file for your computer from the [Releases](../../releases) page. In
 | Linux PC | `Audio-Splitter-x.y.z.AppImage`, or `audio-splitter_x.y.z_amd64.deb` for Ubuntu and Debian |
 | Linux on ARM, 64-bit (for example Raspberry Pi OS 64-bit) | `Audio-Splitter-x.y.z-arm64.AppImage` or `audio-splitter_x.y.z_arm64.deb` |
 
-There is no version for 32-bit ARM Linux after 0.1.0: Electron, which Audio Splitter is built on, no longer makes 32-bit versions. On a Raspberry Pi, use the 64-bit Raspberry Pi OS.
+There is no version for 32-bit ARM Linux after 0.1.0. On a Raspberry Pi, use the 64-bit Raspberry Pi OS.
 
-Not sure which Mac you have? Open the Apple menu → **About This Mac**: “Chip Apple M…” means an Apple chip, and “Processor … Intel” means Intel.
+On a Mac, Audio Splitter needs macOS 12 (Monterey) or later. Not sure which Mac you have? Open the Apple menu → **About This Mac**: “Chip Apple M…” means an Apple chip, and “Processor … Intel” means Intel. The same window shows your macOS version.
 
 Everything the app needs is included, so there is nothing else to install. In the app, press **F1** (or choose **Help → How to Use Audio Splitter**) for a guide like this one.
 
@@ -230,7 +230,7 @@ The UI and the backend both reject values outside these ranges.
 ### Requirements
 
 - [Node.js](https://nodejs.org) 24 + [pnpm](https://pnpm.io) (the version in `packageManager`, via `corepack enable`)
-- [Go](https://go.dev) 1.26+
+- [Go](https://go.dev) 1.26+ (`backend/go.mod` stays at 1.26 so the Mac app runs on macOS 12: see [Releasing](#releasing))
 - ffmpeg/ffprobe in `resources/<arch>/`, or available on `PATH`
 
 ### Setup
@@ -346,6 +346,8 @@ Releases are triggered by pushing a `v*` tag. The release workflow (`.github/wor
 3. Builds in parallel on Linux, macOS, and Windows, for every CPU listed above, after setting the npm `version` from the tag and downloading ffmpeg for each CPU.
 4. Uploads the installers to the draft via `electron-builder --publish always`. Only the macOS job receives the Apple signing and notarization secrets.
 5. Publishes the release once every platform has succeeded, so a failed build never shows up as the latest release.
+
+**The Mac app runs on macOS 12 (Monterey) and later.** Electron 44+ and Go 1.27+ need macOS 13, so `package.json` keeps Electron at 43 and `backend/go.mod` keeps Go at 1.26. The release workflow stops the Mac build when Electron, the backend or ffmpeg needs a newer macOS. Electron 43 stops getting security fixes once Electron 46 is out; moving past it ends macOS 12 support.
 
 When a build fails for a reason outside the code (an Apple agreement to accept, a download that timed out), fix the cause and re-run only the failed jobs: on the run's page, **Re-run jobs → Re-run failed jobs**, or
 

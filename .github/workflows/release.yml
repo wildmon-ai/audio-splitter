@@ -2,14 +2,13 @@ name: Release
 
 # Builds the installers for every OS and CPU in package.json ("build" targets):
 #   Linux    x64, arm64  AppImage + deb  (ubuntu runner)
-#   macOS    x64, arm64  dmg             (macos runner)
+#   macOS    x64, arm64  dmg             (macos runner), for macOS 12 and later
 #   Windows  x64         nsis            (windows runner)
 # Each package bundles the Go backend and ffmpeg/ffprobe for its own CPU.
 # scripts/copy-backend.cjs fails the build when either one is missing.
-# There is no 32-bit ARM Linux (armv7l) build: Electron 44 and later publish
-# 64-bit builds only. macOS signing needs electron-builder 26.18 or later:
-# older versions fail on macOS 26.6 runners ("SecKeychainUnlock: The user name
-# or passphrase you entered is not correct").
+# macOS signing needs electron-builder 26.18 or later: older versions fail on
+# macOS 26.6 runners ("SecKeychainUnlock: The user name or passphrase you
+# entered is not correct").
 
 on:
   push:
@@ -109,6 +108,21 @@ jobs:
 
       - name: Build
         run: pnpm build:backend:release && pnpm build
+
+      # The Mac app must run on macOS 12 (Monterey). Electron 44+ and Go 1.27+
+      # need macOS 13, and a newer ffmpeg build may too: stop before signing.
+      - name: Check that the Mac app runs on macOS 12
+        if: runner.os == 'macOS'
+        run: |
+          fail() { echo "$1: Audio Splitter must run on macOS 12 (see README, Releasing)" >&2; exit 1; }
+          electron="$(node -p "require('electron/package.json').version")"
+          echo "Electron $electron"
+          [ "${electron%%.*}" -le 43 ] || fail "Electron $electron needs macOS 13"
+          for f in dist-backend/audio-splitter-backend-{arm64,x64} resources/{arm64,x64}/{ffmpeg,ffprobe}; do
+            minos="$(otool -l "$f" | awk '$1 == "minos" { print $2; exit }')"
+            echo "$f needs macOS ${minos:-?}"
+            [ "${minos%%.*}" -le 12 ] 2>/dev/null || fail "$f needs macOS ${minos:-(unknown)}"
+          done
 
       - name: Package and upload (Linux, Windows)
         if: runner.os != 'macOS'
