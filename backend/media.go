@@ -13,6 +13,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"syscall"
 )
 
 const (
@@ -145,6 +146,14 @@ func cutClip(ctx context.Context, ffmpeg string, t clipTask) error {
 		return err
 	}
 	tmp := partialPath(t.output)
+	// Create the file before ffmpeg does. On Windows, ffmpeg reports every
+	// unusual failure to create a file (antivirus, a cloud-sync folder, a
+	// failing drive) as "Invalid argument"; Go reports the real cause.
+	f, err := os.Create(tmp)
+	if err != nil {
+		return writeError(err)
+	}
+	f.Close()
 	if _, err := runTool(ctx, ffmpeg, clipArgs(t, tmp)...); err != nil {
 		_ = os.Remove(tmp)
 		return err
@@ -154,6 +163,19 @@ func cutClip(ctx context.Context, ffmpeg string, t clipTask) error {
 		return err
 	}
 	return nil
+}
+
+// errPrivilegeNotHeld is Windows' ERROR_PRIVILEGE_NOT_HELD.
+const errPrivilegeNotHeld = syscall.Errno(1314)
+
+func writeError(err error) error {
+	if runtime.GOOS == "windows" && errors.Is(err, errPrivilegeNotHeld) {
+		// A folder created by a program run as administrator can carry a
+		// "high integrity" label that its new files inherit, and a normal
+		// program may not create such files. Its subfolders are not affected.
+		return fmt.Errorf("cannot write in the output folder, which was probably created by a program run as administrator: choose or create another folder (%w)", err)
+	}
+	return fmt.Errorf("cannot write in the output folder: %w", err)
 }
 
 func clipArgs(t clipTask, output string) []string {
