@@ -20,7 +20,8 @@ Download the file for your computer from the [Releases](../../releases) page. In
 | Mac with an Intel processor | `Audio-Splitter-x.y.z.dmg` |
 | Linux PC | `Audio-Splitter-x.y.z.AppImage`, or `audio-splitter_x.y.z_amd64.deb` for Ubuntu and Debian |
 | Linux on ARM, 64-bit (for example Raspberry Pi OS 64-bit) | `Audio-Splitter-x.y.z-arm64.AppImage` or `audio-splitter_x.y.z_arm64.deb` |
-| Linux on ARM, 32-bit (for example Raspberry Pi OS 32-bit) | `Audio-Splitter-x.y.z-armv7l.AppImage` or `audio-splitter_x.y.z_armv7l.deb` |
+
+There is no version for 32-bit ARM Linux after 0.1.0: Electron, which Audio Splitter is built on, no longer makes 32-bit versions. On a Raspberry Pi, use the 64-bit Raspberry Pi OS.
 
 Not sure which Mac you have? Open the Apple menu → **About This Mac**: “Chip Apple M…” means an Apple chip, and “Processor … Intel” means Intel.
 
@@ -238,7 +239,7 @@ The UI and the backend both reject values outside these ranges.
 pnpm install
 
 # ffmpeg/ffprobe for local development, into resources/<arch>/
-bash scripts/download-ffmpeg.sh x64           # Linux (x64, arm64 or armv7l)
+bash scripts/download-ffmpeg.sh x64           # Linux (x64 or arm64)
 bash scripts/download-ffmpeg-macos.sh arm64   # macOS (arm64 or x64)
 pwsh scripts/download-ffmpeg-windows.ps1      # Windows (x64)
 ```
@@ -312,7 +313,7 @@ To try changes without packaging, `pnpm dev` (see [Run](#run)) is faster.
 pnpm dist
 ```
 
-This builds every CPU this OS packages, like the release workflow, so it needs ffmpeg for each of them in `resources/<arch>/` (on Linux: x64, arm64 and armv7l). It runs in order:
+This builds every CPU this OS packages, like the release workflow, so it needs ffmpeg for each of them in `resources/<arch>/` (on Linux: x64 and arm64). It runs in order:
 
 1. `pnpm build:backend:release` builds the backend for every CPU this OS packages into `dist-backend/audio-splitter-backend-<arch>`.
 2. `vue-tsc`, `vite build`, and `tsc` compile the frontend and Electron main process.
@@ -320,13 +321,13 @@ This builds every CPU this OS packages, like the release workflow, so it needs f
 
 | Platform | CPUs | Output |
 | --- | --- | --- |
-| Linux | x64, arm64, armv7l | `release/Audio Splitter-x.x.x.AppImage`, `release/audio-splitter_x.x.x_amd64.deb` |
+| Linux | x64, arm64 | `release/Audio Splitter-x.x.x.AppImage`, `release/audio-splitter_x.x.x_amd64.deb` |
 | macOS | x64, arm64 | `release/Audio Splitter-x.x.x.dmg` |
 | Windows | x64 | `release/Audio Splitter Setup x.x.x.exe` |
 
 ## ffmpeg
 
-The download scripts put static builds in `resources/<arch>/` (electron-builder's names: `x64`, `arm64`, `armv7l`) and check them against published checksums:
+The download scripts put static builds in `resources/<arch>/` (electron-builder's names: `x64`, `arm64`) and check them against published checksums:
 
 | OS | Source | Script |
 | --- | --- | --- |

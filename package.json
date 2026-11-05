@@ -29,7 +29,7 @@
     "@vitest/ui": "^4.1.8",
     "concurrently": "^9",
     "electron": "^45",
-    "electron-builder": "^26",
+    "electron-builder": "^26.18.1",
     "jsdom": "^29.1.1",
     "pinia": "^2",
     "tailwindcss": "^4",
@@ -72,8 +72,8 @@
     "afterPack": "scripts/copy-backend.cjs",
     "linux": {
       "target": [
-        { "target": "AppImage", "arch": ["x64", "arm64", "armv7l"] },
-        { "target": "deb",      "arch": ["x64", "arm64", "armv7l"] }
+        { "target": "AppImage", "arch": ["x64", "arm64"] },
+        { "target": "deb",      "arch": ["x64", "arm64"] }
       ],
       "icon": "build/icons",
       "category": "AudioVideo"

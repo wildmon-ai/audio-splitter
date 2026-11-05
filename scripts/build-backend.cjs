@@ -22,7 +22,7 @@ const GO_ARCH = {
   arm: { GOARCH: 'arm', GOARM: '7' }, // Node's name for 32-bit ARM
 }
 // Must match the "arch" lists of the electron-builder targets in package.json.
-const RELEASE_ARCHS = { windows: ['x64'], darwin: ['x64', 'arm64'], linux: ['x64', 'arm64', 'armv7l'] }
+const RELEASE_ARCHS = { windows: ['x64'], darwin: ['x64', 'arm64'], linux: ['x64', 'arm64'] }
 
 if (!GOOS) throw new Error(`build-backend: unsupported platform ${process.platform}`)
 const ext = GOOS === 'windows' ? '.exe' : ''

@@ -1,11 +1,15 @@
 name: Release
 
 # Builds the installers for every OS and CPU in package.json ("build" targets):
-#   Linux    x64, arm64, armv7l  AppImage + deb  (ubuntu runner)
-#   macOS    x64, arm64          dmg             (macos runner)
-#   Windows  x64                 nsis            (windows runner)
+#   Linux    x64, arm64  AppImage + deb  (ubuntu runner)
+#   macOS    x64, arm64  dmg             (macos runner)
+#   Windows  x64         nsis            (windows runner)
 # Each package bundles the Go backend and ffmpeg/ffprobe for its own CPU.
 # scripts/copy-backend.cjs fails the build when either one is missing.
+# There is no 32-bit ARM Linux (armv7l) build: Electron 44 and later publish
+# 64-bit builds only. macOS signing needs electron-builder 26.18 or later:
+# older versions fail on macOS 26.6 runners ("SecKeychainUnlock: The user name
+# or passphrase you entered is not correct").
 
 on:
   push:
@@ -68,7 +72,6 @@ jobs:
         run: |
           bash scripts/download-ffmpeg.sh x64
           bash scripts/download-ffmpeg.sh arm64
-          bash scripts/download-ffmpeg.sh armv7l
 
       - name: Download ffmpeg (macOS)
         if: runner.os == 'macOS'
