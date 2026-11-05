@@ -13,50 +13,168 @@
         --line: #e5e7eb;
         --page: #f3f4f6;
         --accent: #2563eb;
+        --clip: #2563eb;
+        --clip-ink: #1e3a8a;
+        --clip-soft: #eff6ff;
+        --clip-line: #bfdbfe;
+        --skip: #e5e7eb;
+        --good: #047857;
+        --warn: #92400e;
       }
       * { box-sizing: border-box; }
+      html { scroll-padding-top: 16px; }
+      @media (prefers-reduced-motion: no-preference) {
+        html { scroll-behavior: smooth; }
+      }
       body {
         margin: 0;
         background: var(--page);
         color: var(--ink);
-        font: 14px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        font: 15px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
       }
       header { background: #0f1117; padding: 16px 24px; }
       header h1 { margin: 0; color: #fff; font-size: 16px; font-weight: 600; line-height: 1.3; }
       header p { margin: 2px 0 0; color: #94a3b8; font-size: 12px; }
-      main { max-width: 720px; margin: 0 auto; padding: 24px; display: flex; flex-direction: column; gap: 16px; }
-      section {
+      main { max-width: 720px; margin: 0 auto; padding: 24px 20px 32px; display: flex; flex-direction: column; gap: 16px; }
+      section, nav {
         background: #fff;
         border: 1px solid var(--line);
         border-radius: 12px;
         box-shadow: 0 1px 2px rgb(0 0 0 / 0.05);
-        padding: 16px 20px;
+        padding: 20px 24px;
       }
-      h2 {
-        margin: 0 0 8px;
-        font-size: 13px;
-        font-weight: 600;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
-      }
-      p, ol, ul, dl { margin: 0 0 8px; }
-      p:last-child, ol:last-child, ul:last-child, dl:last-child { margin-bottom: 0; }
-      ol, ul { padding-left: 20px; }
-      li + li { margin-top: 2px; }
-      dt { font-weight: 600; }
-      dd { margin: 0 0 10px; color: var(--muted); }
-      dd:last-child { margin-bottom: 0; }
+      h2 { margin: 0 0 12px; font-size: 24px; font-weight: 650; line-height: 1.25; letter-spacing: -0.01em; text-wrap: balance; }
+      nav h2 { margin-bottom: 8px; font-size: 15px; letter-spacing: 0; }
+      h3 { margin: 20px 0 6px; font-size: 15px; font-weight: 650; line-height: 1.4; }
+      p, ol, ul, dl, figure, .table-wrap, .anatomy, .folders { margin: 0 0 12px; }
+      section > :last-child, nav > :last-child, details > :last-child { margin-bottom: 0; }
+      ol, ul { padding-left: 22px; }
+      li + li { margin-top: 4px; }
+      a { color: var(--accent); text-underline-offset: 2px; }
+      :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
       code {
-        font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font: 14px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
         background: var(--page);
         border-radius: 4px;
         padding: 1px 5px;
         overflow-wrap: anywhere;
       }
+      kbd {
+        font: 600 14px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        background: #fff;
+        border: 1px solid #93c5fd;
+        border-radius: 6px;
+        padding: 0 7px;
+      }
+      .note { color: var(--muted); font-size: 14px; }
+
+      /* On this page */
+      .toc { list-style: none; padding: 0; columns: 2 220px; column-gap: 24px; }
+      .toc li { break-inside: avoid; margin: 0 0 4px; }
+
+      /* The one rule people get wrong */
+      .rule {
+        background: var(--clip-soft);
+        border: 1px solid var(--clip-line);
+        border-radius: 10px;
+        padding: 12px 16px;
+        color: var(--clip-ink);
+      }
+
+      /* Looks like the summary the app shows when a job is done */
+      .sample {
+        background: #ecfdf5;
+        border: 1px solid #a7f3d0;
+        border-radius: 10px;
+        padding: 10px 14px;
+        color: #065f46;
+      }
+
+      /* Timelines: one square per minute */
+      figure { margin-left: 0; margin-right: 0; container-type: inline-size; }
+      figcaption { margin-top: 8px; font-size: 14px; color: var(--muted); }
+      .minutes, .axis { display: grid; grid-template-columns: repeat(15, minmax(0, 1fr)); gap: 3px; }
+      .minutes > span, .file > span {
+        display: grid;
+        place-items: center;
+        height: 30px;
+        border-radius: 5px;
+        background: var(--skip);
+        font-size: 12px;
+        font-weight: 600;
+        color: #fff;
+        overflow: hidden;
+      }
+      .minutes > .clip, .file > .clip { background: var(--clip); }
+      .axis { margin-top: 4px; font-size: 12px; color: var(--muted); text-align: center; font-variant-numeric: tabular-nums; }
+      .legend { display: flex; flex-wrap: wrap; gap: 4px 18px; margin-top: 8px; font-size: 12px; color: var(--muted); }
+      .legend span::before {
+        content: "";
+        display: inline-block;
+        width: 12px;
+        height: 12px;
+        margin-right: 6px;
+        border-radius: 3px;
+        vertical-align: -1px;
+        background: var(--skip);
+      }
+      .legend .is-clip::before { background: var(--clip); }
+      .files-row { display: grid; grid-template-columns: 52px minmax(0, 1fr); gap: 10px; align-items: start; }
+      .files-row + .files-row { margin-top: 8px; }
+      .files-row > b { padding-top: 5px; font-size: 14px; white-space: nowrap; }
+      .files { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+      .file { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 2px; padding: 3px; border: 1px dashed #9ca3af; border-radius: 7px; }
+      .file > span { height: 24px; }
+      .files-axis { text-align: center; font-size: 12px; color: var(--muted); }
+      .verdict { display: block; margin-top: 2px; font-size: 14px; font-weight: 600; }
+      .verdict.good { color: var(--good); }
+      .verdict.bad { color: var(--warn); }
+      @container (width < 440px) {
+        .minutes > span, .file > span { font-size: 0; }
+        .axis span:not(:nth-child(5n + 1)) { visibility: hidden; }
+      }
+
+      /* Example tables */
+      .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; }
+      table { width: 100%; border-collapse: collapse; font-size: 14px; }
+      caption { caption-side: top; padding: 10px 12px 8px; text-align: left; font-weight: 600; }
+      th, td { padding: 7px 12px; border-top: 1px solid var(--line); text-align: left; vertical-align: top; }
+      thead th { background: var(--page); color: var(--muted); font-weight: 600; }
+      tbody th { font-weight: 650; white-space: nowrap; font-variant-numeric: tabular-nums; }
+      td { font-variant-numeric: tabular-nums; }
+      td.good { color: var(--good); font-weight: 600; }
+      td.bad { color: var(--warn); font-weight: 600; }
+
+      /* Parts of a clip name */
+      .anatomy { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 2px; }
+      .anatomy > span { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+      .anatomy code { font-size: 15px; padding: 4px 6px; }
+      .anatomy .date code { background: #dbeafe; color: var(--clip-ink); }
+      .anatomy .time code { background: #dcfce7; color: #14532d; }
+      .anatomy small { font-size: 12px; color: var(--muted); text-align: center; line-height: 1.3; }
+
+      /* Folder example */
+      .folders { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px 24px; }
+      .folders h3 { margin-top: 0; }
+      .tree, .tree ul { list-style: none; margin: 0; padding: 0; }
+      .tree ul { padding-left: 18px; }
+      .tree li + li, .tree ul { margin-top: 2px; }
+      .folder { font-weight: 600; }
+
+      /* Results */
+      dt { font-weight: 650; }
+      dd { margin: 0 0 10px; color: var(--muted); }
+      dd:last-child { margin-bottom: 0; }
+
+      /* Questions */
+      details { border-top: 1px solid var(--line); padding: 10px 0; }
+      details:last-of-type { border-bottom: 1px solid var(--line); }
+      summary { cursor: pointer; font-weight: 600; }
+      details > p { margin: 8px 0 0; }
+
       .tip { background: #fffbeb; border-color: #fde68a; }
-      .tip h2 { color: #92400e; }
-      .footer { margin: 0; color: var(--muted); font-size: 13px; text-align: center; }
-      a { color: var(--accent); }
+      .tip h2 { color: var(--warn); }
+      .footer { margin: 0; color: var(--muted); font-size: 14px; text-align: center; }
     </style>
   </head>
   <body>
@@ -66,88 +184,394 @@
     </header>
 
     <main>
-      <section>
-        <h2>What it does</h2>
+      <nav aria-labelledby="toc-title">
+        <h2 id="toc-title">On this page</h2>
+        <ul class="toc">
+          <li><a href="#what">What Audio Splitter does</a></li>
+          <li><a href="#start">Quick start</a></li>
+          <li><a href="#every">Choosing Extract Every N Minutes</a></li>
+          <li><a href="#files">Recordings saved in several files</a></li>
+          <li><a href="#names">How clips are named</a></li>
+          <li><a href="#folders">Where the clips are saved</a></li>
+          <li><a href="#finish">When it finishes</a></li>
+          <li><a href="#stop">Stopping and running again</a></li>
+          <li><a href="#parallel">Parallel Processes</a></li>
+          <li><a href="#questions">Questions</a></li>
+          <li><a href="#good-to-know">Good to know</a></li>
+        </ul>
+      </nav>
+
+      <section id="what" aria-labelledby="what-title">
+        <h2 id="what-title">What Audio Splitter does</h2>
         <p>
-          Audio Splitter cuts samples out of long field recordings. For every audio file in the
-          <b>Source Folder</b> (subfolders included), it extracts one <b>1-minute clip every N minutes</b>
-          and saves the clips in the <b>Output Folder</b>, keeping the same subfolder structure.
+          Audio Splitter takes short samples from long recordings. From every recording in a folder, it saves
+          <b>a 1-minute clip every few minutes</b>. You choose how many minutes with <b>Extract Every N Minutes</b>.
         </p>
         <p>
-          A clip is only made when a full minute of audio is left, so a recording never ends with a short or
-          empty clip. Clips are mono and keep the file type of the original recording (and the bit depth of
-          WAV and FLAC files). Supported files: WAV, FLAC, MP3, OGG, M4A and OPUS.
+          For example, from a 1-hour recording with N = 10, you get 6 clips of 1 minute: one at the start of the
+          recording and one every 10 minutes after that, at minutes 0, 10, 20, 30, 40 and 50.
         </p>
+        <p><b>Your recordings are never changed or deleted.</b> The clips are new files, saved in the Output Folder.</p>
       </section>
 
-      <section>
-        <h2>Quick start</h2>
+      <section id="start" aria-labelledby="start-title">
+        <h2 id="start-title">Quick start</h2>
         <ol>
-          <li>Choose the <b>Source Folder</b> with your recordings.</li>
-          <li>Choose an empty <b>Output Folder</b> outside the Source Folder.</li>
-          <li>Set <b>Extract Every N Minutes</b>.</li>
-          <li>Click <b>Start Processing</b> and follow the progress bar and the log.</li>
+          <li>
+            Next to <b>Source Folder</b>, click <b>Browse</b> and choose the folder with your recordings, for example
+            the recorder's memory card. Recordings in its subfolders are included.
+          </li>
+          <li>
+            Next to <b>Output Folder</b>, click <b>Browse</b> and choose a folder for the clips. An empty folder is
+            best. It cannot be the Source Folder.
+          </li>
+          <li>Set <b>Extract Every N Minutes</b>: the time from the start of one clip to the start of the next (see below).</li>
+          <li>Leave <b>Parallel Processes</b> at <code>0</code>.</li>
+          <li>Click <b>Start Processing</b>. The progress bar shows how far it is, and the Log shows what is happening.</li>
+          <li>When it finishes, a summary tells you how many clips were saved.</li>
         </ol>
       </section>
 
-      <section>
-        <h2>Settings</h2>
-        <dl>
-          <dt>Extract Every N Minutes</dt>
-          <dd>
-            Time between the start of one clip and the start of the next. With N = 10, a 60-minute
-            recording gives 6 clips, starting at minutes 0, 10, 20, 30, 40 and 50. Use 1 or more.
-          </dd>
-          <dt>Parallel Processes</dt>
-          <dd>
-            How many clips are cut at the same time. <code>0</code> means automatic (one per CPU core).
-            Use a lower number if the computer becomes slow, or if the recordings are on a USB drive or SD card.
-          </dd>
-        </dl>
+      <section id="every" aria-labelledby="every-title">
+        <h2 id="every-title">Choosing Extract Every N Minutes</h2>
+        <p>
+          N is the time from the <b>start</b> of one clip to the <b>start</b> of the next. Every clip is 1 minute
+          long, so after each clip the next N − 1 minutes are skipped.
+        </p>
+        <p class="rule">
+          <b>For one clip every 5 minutes, enter <kbd>5</kbd>, not 4.</b> For one clip every 10 minutes, enter
+          <kbd>10</kbd>.
+        </p>
+
+        <figure>
+          <div role="img" aria-label="A recording with N = 5: minutes 0, 5 and 10 become 1-minute clips, and the 4 minutes after each clip are skipped.">
+            <div class="minutes">
+              <span class="clip">clip</span><span></span><span></span><span></span><span></span>
+              <span class="clip">clip</span><span></span><span></span><span></span><span></span>
+              <span class="clip">clip</span><span></span><span></span><span></span><span></span>
+            </div>
+            <div class="axis">
+              <span>0</span><span>1</span><span>2</span><span>3</span><span>4</span>
+              <span>5</span><span>6</span><span>7</span><span>8</span><span>9</span>
+              <span>10</span><span>11</span><span>12</span><span>13</span><span>14</span>
+            </div>
+          </div>
+          <div class="legend" aria-hidden="true"><span class="is-clip">1-minute clip</span><span>skipped</span></div>
+          <figcaption>
+            N = 5, the first 15 minutes of a recording. Each square is one minute: the clips start at minutes 0, 5
+            and 10, and the 4 minutes after each clip are skipped.
+          </figcaption>
+        </figure>
+
+        <div class="table-wrap" role="region" aria-labelledby="hour-caption" tabindex="0">
+          <table>
+            <caption id="hour-caption">A 1-hour recording that starts at 14:00</caption>
+            <thead>
+              <tr><th scope="col">N</th><th scope="col">Clips</th><th scope="col">Clips start at</th></tr>
+            </thead>
+            <tbody>
+              <tr><th scope="row">1</th><td>60</td><td>every minute: 14:00, 14:01, 14:02 … 14:59 (the whole hour)</td></tr>
+              <tr><th scope="row">5</th><td>12</td><td>14:00, 14:05, 14:10 … 14:55</td></tr>
+              <tr><th scope="row">10</th><td>6</td><td>14:00, 14:10, 14:20, 14:30, 14:40, 14:50</td></tr>
+              <tr><th scope="row">15</th><td>4</td><td>14:00, 14:15, 14:30, 14:45</td></tr>
+              <tr><th scope="row">30</th><td>2</td><td>14:00, 14:30</td></tr>
+              <tr><th scope="row">60</th><td>1</td><td>14:00</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>The end of a recording</h3>
+        <p>
+          A clip is only made when a full minute of recording is left. A recording of 10 minutes and 30 seconds with
+          N = 5 gives clips at minutes 0 and 5. At minute 10 only 30 seconds are left, so there is no third clip.
+          Recordings shorter than a minute give no clips.
+        </p>
       </section>
 
-      <section>
-        <h2>Clip names</h2>
+      <section id="files" aria-labelledby="files-title">
+        <h2 id="files-title">Recordings saved in several files</h2>
         <p>
-          If the file name contains the recording start time as <code>YYYYMMDD_HHMMSS</code>, each clip is
-          named with its own start time. With N = 10, <code>SITE01_20240601_060000.wav</code> gives
-          <code>SITE01_20240601_060000.wav</code>, <code>SITE01_20240601_061000.wav</code>,
-          <code>SITE01_20240601_062000.wav</code>, …
+          Many recorders save a new file every few minutes, for example every 5 minutes. Audio Splitter treats each
+          file as a separate recording: the count starts again at the start of every file, so each file's first
+          clip is its first minute.
+        </p>
+
+        <figure>
+          <div class="files-row">
+            <b aria-hidden="true">N = 5</b>
+            <div role="img" aria-label="N = 5 with 5-minute files: one clip at the start of each file, at 14:00, 14:05 and 14:10. Evenly spaced.">
+              <div class="files">
+                <span class="file"><span class="clip">clip</span><span></span><span></span><span></span><span></span></span>
+                <span class="file"><span class="clip">clip</span><span></span><span></span><span></span><span></span></span>
+                <span class="file"><span class="clip">clip</span><span></span><span></span><span></span><span></span></span>
+              </div>
+              <span class="verdict good" aria-hidden="true">Evenly spaced: 14:00, 14:05, 14:10</span>
+            </div>
+          </div>
+          <div class="files-row">
+            <b aria-hidden="true">N = 4</b>
+            <div role="img" aria-label="N = 4 with 5-minute files: two clips in each file, at minutes 0 and 4: 14:00, 14:04, 14:05, 14:09, 14:10, 14:14. Unevenly spaced.">
+              <div class="files">
+                <span class="file"><span class="clip">clip</span><span></span><span></span><span></span><span class="clip">clip</span></span>
+                <span class="file"><span class="clip">clip</span><span></span><span></span><span></span><span class="clip">clip</span></span>
+                <span class="file"><span class="clip">clip</span><span></span><span></span><span></span><span class="clip">clip</span></span>
+              </div>
+              <span class="verdict bad" aria-hidden="true">Uneven: 14:00, 14:04, 14:05, 14:09, 14:10, 14:14</span>
+            </div>
+          </div>
+          <div class="files-row" aria-hidden="true">
+            <span></span>
+            <div class="files files-axis"><span>file 14:00</span><span>file 14:05</span><span>file 14:10</span></div>
+          </div>
+          <figcaption>
+            Three 5-minute files. Each dashed box is one file and each square one minute.
+          </figcaption>
+        </figure>
+
+        <div class="table-wrap" role="region" aria-labelledby="files-caption" tabindex="0">
+          <table>
+            <caption id="files-caption">Recordings saved as 5-minute files, starting at 14:00, 14:05, 14:10 …</caption>
+            <thead>
+              <tr><th scope="col">N</th><th scope="col">Clips from each file</th><th scope="col">Clips start at</th><th scope="col">Spacing</th></tr>
+            </thead>
+            <tbody>
+              <tr><th scope="row">5</th><td>1, the first minute</td><td>14:00, 14:05, 14:10 …</td><td class="good">Even</td></tr>
+              <tr><th scope="row">1</th><td>5, every minute</td><td>14:00, 14:01 … 14:04, 14:05 …</td><td class="good">Even</td></tr>
+              <tr><th scope="row">4</th><td>2, at minutes 0 and 4</td><td>14:00, 14:04, 14:05, 14:09, 14:10 …</td><td class="bad">Uneven</td></tr>
+              <tr><th scope="row">10</th><td>1, the first minute</td><td>14:00, 14:05, 14:10 …</td><td>Every 5 minutes, not 10</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p class="rule">
+          <b>For evenly spaced clips, choose an N that fits exactly into the length of your files.</b> For 5-minute
+          files, use 1 or 5. For 1-hour files, use 1, 2, 3, 4, 5, 6, 10, 12, 15, 20, 30 or 60.
         </p>
         <p>
-          Otherwise, clips are named after their position in the recording, in minutes:
-          <code>recording_0000m.wav</code>, <code>recording_0010m.wav</code>, …
+          When N is longer than your files, each file still gives its first minute. That is why N = 10 with 5-minute
+          files gives a clip every 5 minutes, not every 10.
         </p>
       </section>
 
-      <section>
-        <h2>Stopping and resuming</h2>
+      <section id="names" aria-labelledby="names-title">
+        <h2 id="names-title">How clips are named</h2>
         <p>
-          <b>Cancel</b> stops the job right away. A clip is only saved once it is complete, so stopping never
-          leaves half-written clips behind.
+          Many recorders name each recording with the date and time it started. Audio Splitter names each clip with
+          the date and time <b>the clip</b> starts:
         </p>
+        <div class="anatomy" role="group" aria-label="Parts of the clip name SITE01_20260119_140500.WAV">
+          <span><code>SITE01_</code><small>stays the same</small></span>
+          <span class="date"><code>20260119</code><small>date:<br />19 January 2026</small></span>
+          <span><code>_</code></span>
+          <span class="time"><code>140500</code><small>time:<br />14:05:00</small></span>
+          <span><code>.WAV</code><small>file type</small></span>
+        </div>
         <p>
-          Clips that already exist in the Output Folder are skipped and counted as "skipped" in the summary,
-          so running again with the same folders continues where it stopped. Incomplete clips left by older
-          versions are made again. To redo a clip yourself, delete it from the Output Folder first.
+          The time is hours, minutes and seconds: <code>140500</code> is 14:05:00. <b>The last two digits are
+          seconds</b>, so <code>140005</code> would be 14:00:05, five seconds after 14:00, not five minutes.
         </p>
-      </section>
 
-      <section class="tip">
-        <h2>Tips</h2>
+        <h3>Example</h3>
+        <p>A 1-hour recording named <code>SITE01_20260119_140000.WAV</code>, with N = 5, gives 12 clips:</p>
         <ul>
+          <li><code>SITE01_20260119_140000.WAV</code></li>
+          <li><code>SITE01_20260119_140500.WAV</code></li>
+          <li><code>SITE01_20260119_141000.WAV</code></li>
+          <li>… and so on, every 5 minutes, up to <code>SITE01_20260119_145500.WAV</code></li>
+        </ul>
+        <p>
+          The first clip has the same name as the recording because it starts at the same moment. It is a new file in
+          the Output Folder; the recording itself is not touched. After midnight, the date moves on to the next day.
+        </p>
+
+        <h3>Names without a date and time</h3>
+        <p>
+          Audio Splitter finds the date and time when they are written like <code>20260119_140000</code>: 8 digits,
+          an underscore, then 6 digits. If a name has no date and time, the clips are numbered with the minute of the
+          recording where they start. With N = 5, <code>rain_test.wav</code> gives <code>rain_test_0000m.wav</code>,
+          <code>rain_test_0005m.wav</code>, <code>rain_test_0010m.wav</code> …
+        </p>
+      </section>
+
+      <section id="folders" aria-labelledby="folders-title">
+        <h2 id="folders-title">Where the clips are saved</h2>
+        <p>The Output Folder gets the same subfolders as the Source Folder, so the clips from each site stay apart.</p>
+        <div class="folders">
+          <div>
+            <h3>Source Folder</h3>
+            <ul class="tree">
+              <li><span class="folder">Recordings</span>
+                <ul>
+                  <li><span class="folder">SITE01</span>
+                    <ul><li><code>20260119_140000.WAV</code> (1 hour)</li></ul>
+                  </li>
+                  <li><span class="folder">SITE02</span>
+                    <ul><li><code>20260119_140000.WAV</code> (1 hour)</li></ul>
+                  </li>
+                </ul>
+              </li>
+            </ul>
+          </div>
+          <div>
+            <h3>Output Folder, with N = 5</h3>
+            <ul class="tree">
+              <li><span class="folder">Clips</span>
+                <ul>
+                  <li><span class="folder">SITE01</span>
+                    <ul>
+                      <li><code>20260119_140000.WAV</code></li>
+                      <li><code>20260119_140500.WAV</code></li>
+                      <li>… 12 clips, up to <code>20260119_145500.WAV</code></li>
+                    </ul>
+                  </li>
+                  <li><span class="folder">SITE02</span>
+                    <ul><li>the same 12 names, cut from the SITE02 recording</li></ul>
+                  </li>
+                </ul>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section id="finish" aria-labelledby="finish-title">
+        <h2 id="finish-title">When it finishes</h2>
+        <p>A summary at the bottom of the window says how it went, for example:</p>
+        <p class="sample"><b>Done.</b> 12 clips extracted, 0 skipped, 0 errors · 41s</p>
+        <dl>
+          <dt>clips extracted</dt>
+          <dd>New clips saved this time.</dd>
+          <dt>skipped</dt>
+          <dd>Clips that were already in the Output Folder from an earlier run. They are left as they are.</dd>
+          <dt>errors</dt>
+          <dd>Recordings that could not be read, or clips that could not be saved. The Log lists them; everything else is still done.</dd>
+        </dl>
+        <p>The first words sum it up:</p>
+        <ul>
+          <li><b>Done.</b> Everything worked.</li>
+          <li><b>Done, with errors.</b> Some recordings or clips had a problem; the Log lists them.</li>
+          <li><b>Cancelled.</b> You stopped it. Run it again to continue.</li>
           <li>
-            The Output Folder cannot be the Source Folder. If it is inside it, Audio Splitter leaves it out
-            when looking for recordings.
+            <b>Failed.</b> Nothing could be done. The message says why, for example that the Source Folder has no
+            recordings.
+          </li>
+        </ul>
+      </section>
+
+      <section id="stop" aria-labelledby="stop-title">
+        <h2 id="stop-title">Stopping and running again</h2>
+        <p>
+          Click <b>Cancel</b> to stop at any time. Clips already saved are kept, and a clip is only saved once it is
+          complete, so stopping never leaves half-made clips.
+        </p>
+        <p>
+          To continue later, start again with the same folders and the same N. Clips that already exist are skipped,
+          so only the missing ones are made. To make a clip again, delete it from the Output Folder first.
+        </p>
+      </section>
+
+      <section id="parallel" aria-labelledby="parallel-title">
+        <h2 id="parallel-title">Parallel Processes</h2>
+        <p>
+          How many clips are made at the same time. Leave it at <code>0</code>: Audio Splitter then makes as many
+          clips at once as the computer has processor cores. If the computer becomes slow while it works, or the recordings are on a
+          memory card or USB drive, enter a lower number, such as <code>2</code>. Numbers higher than the computer can
+          use well are lowered automatically.
+        </p>
+      </section>
+
+      <section id="questions" aria-labelledby="questions-title">
+        <h2 id="questions-title">Questions</h2>
+        <details>
+          <summary>I want one clip every 5 minutes. Should I enter 4 or 5?</summary>
+          <p>
+            5. N counts from the start of one clip to the start of the next, and the 1-minute clip is the first of
+            those 5 minutes. With 4 you get one clip every 4 minutes instead.
+          </p>
+        </details>
+        <details>
+          <summary>Will Audio Splitter change or delete my recordings?</summary>
+          <p>No. It only reads them. The clips are new files in the Output Folder.</p>
+        </details>
+        <details>
+          <summary>Why does a clip have the same name as my recording?</summary>
+          <p>
+            The first clip starts at the same moment as the recording, so it gets the same date and time. It is a
+            separate file, in the Output Folder.
+          </p>
+        </details>
+        <details>
+          <summary>I entered 10, but I got a clip every 5 minutes.</summary>
+          <p>
+            Your recorder probably saves 5-minute files. Each file gives at least its first minute, so you get one clip
+            per file. See <a href="#files">Recordings saved in several files</a>.
+          </p>
+        </details>
+        <details>
+          <summary>Why is there no clip at the end of my recording?</summary>
+          <p>
+            Less than a full minute was left. With N = 5, a recording of 10 minutes and 30 seconds gives clips at
+            minutes 0 and 5 only.
+          </p>
+        </details>
+        <details>
+          <summary>Can clips be longer or shorter than 1 minute?</summary>
+          <p>No. Clips are always 1 minute long.</p>
+        </details>
+        <details>
+          <summary>The summary shows errors. What should I do?</summary>
+          <p>
+            Look at the Log: each error names the recording or clip. Often the recording is damaged or empty, for
+            example when the recorder's battery ran out. All the other recordings are processed normally.
+          </p>
+        </details>
+        <details>
+          <summary>It says “Could not start ffprobe” or “Could not start ffmpeg”.</summary>
+          <p>
+            These are the tools inside Audio Splitter that read and cut the audio, and they could not run on this
+            computer. Install the latest version of Audio Splitter again. If the message comes back,
+            <a href="https://github.com/wildmon-ai/audio-splitter/issues" target="_blank" rel="noreferrer">report it on GitHub</a>
+            and copy the whole message into the report.
+          </p>
+        </details>
+        <details>
+          <summary>Clips made with version 0.1.0 are almost empty.</summary>
+          <p>
+            Version 0.1.0 could leave a clip of a fraction of a second at the end of each recording. Run Audio Splitter
+            again with the same folders: most of them are replaced by full clips. To find the rest, sort the Output
+            Folder by size; they are only a few KB. Delete them.
+          </p>
+        </details>
+      </section>
+
+      <section id="good-to-know" class="tip" aria-labelledby="good-to-know-title">
+        <h2 id="good-to-know-title">Good to know</h2>
+        <ul>
+          <li>Audio Splitter reads WAV, FLAC, MP3, OGG, M4A and OPUS recordings.</li>
+          <li>
+            Clips have the same file type as the recording. WAV and FLAC clips also keep the recording's sample rate
+            and bit depth. MP3, OGG, M4A and OPUS clips are compressed again, as when an audio editor saves them.
+          </li>
+          <li>Clips are mono. If a recording has two channels (stereo), they are mixed into one.</li>
+          <li>
+            Hidden files, the <code>._</code> files Macs leave on memory cards, and system folders are ignored. A folder
+            that cannot be opened is skipped, and the Log says so.
           </li>
           <li>
-            Hidden files, the <code>._</code> files macOS leaves on memory cards and system folders are ignored.
-            A folder that cannot be opened is skipped with a warning in the log.
+            The Output Folder may be inside the Source Folder: Audio Splitter does not look for recordings in it.
           </li>
-          <li>If a file cannot be read, the error appears in the log and the other files keep going.</li>
           <li>
-            If two recordings overlap in time and would produce clips with the same name, only the first is
-            kept and the log says so.
+            If two recordings overlap in time and would give clips with the same name, only the first is kept, and the
+            Log says so.
+          </li>
+          <li>
+            To make the text bigger or smaller, use <b>View → Zoom In</b> or <b>Zoom Out</b> (Ctrl and + or Ctrl and −;
+            on a Mac, Cmd). <b>View → Actual Size</b> goes back to normal.
+          </li>
+          <li>
+            <b>View → Toggle Full Screen</b> (F11; on a Mac, Ctrl+Cmd+F) fills the screen. To leave full screen, press
+            <kbd>Esc</kbd> or click
+            <b>Exit full screen</b> at the top right.
           </li>
         </ul>
       </section>

@@ -22,7 +22,10 @@ func run(ctx context.Context, cfg Config, bins tools, events *emitter) doneEvent
 	if err != nil {
 		return events.fail(err)
 	}
-	if err := bins.check(); err != nil {
+	if err := bins.check(ctx); err != nil {
+		if ctx.Err() != nil {
+			return finished(events, started, 0, 0, 0, true)
+		}
 		return events.fail(err)
 	}
 	workers := workerCount(cfg.Threads)

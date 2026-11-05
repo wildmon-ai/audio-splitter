@@ -137,9 +137,17 @@ function createWindow() {
     },
   })
   keepNavigationInside(mainWindow)
-  // A reload (View → Reload) or a crashed page loses track of the job: stop it.
+  // A reload (View → Reload in development) or a crashed page loses track of
+  // the job: stop it.
   mainWindow.webContents.on('did-start-loading', cancelJob)
   mainWindow.webContents.on('render-process-gone', cancelJob)
+
+  // Full screen hides the title bar and the menu bar, so the page shows a
+  // button to leave it.
+  const reportFullScreen = () => sendToRenderer('full-screen-changed', mainWindow?.isFullScreen() ?? false)
+  mainWindow.on('enter-full-screen', reportFullScreen)
+  mainWindow.on('leave-full-screen', reportFullScreen)
+  mainWindow.webContents.on('did-finish-load', reportFullScreen)
 
   if (isDev) {
     mainWindow.loadURL(DEV_SERVER_URL)
@@ -186,15 +194,52 @@ function buildMenu(): Menu {
   ]
   if (!isMac) helpSubmenu.push({ type: 'separator' }, { role: 'about' })
 
-  const template: MenuItemConstructorOptions[] = [
-    { role: 'fileMenu' },
-    { role: 'editMenu' },
-    { role: 'viewMenu' },
-    { role: 'windowMenu' },
+  const template: MenuItemConstructorOptions[] = []
+  if (isMac) template.push({ role: 'appMenu' })
+  template.push({ role: 'fileMenu' })
+  // macOS needs the Edit menu for Cmd+C, Cmd+V and Cmd+A to work in text
+  // fields and the log. Windows and Linux handle those keys without it.
+  if (isMac) template.push({ role: 'editMenu' })
+  template.push(
+    { label: 'View', submenu: viewSubmenu() },
+    isMac ? { role: 'windowMenu' } : { label: 'Window', submenu: windowSubmenu() },
     { role: 'help', submenu: helpSubmenu },
-  ]
-  if (isMac) template.unshift({ role: 'appMenu' })
+  )
   return Menu.buildFromTemplate(template)
+}
+
+// Text size and full screen. Reload would stop a running job, so only the
+// development build has it, with the developer tools.
+function viewSubmenu(): MenuItemConstructorOptions[] {
+  const items: MenuItemConstructorOptions[] = [
+    { role: 'resetZoom' },
+    // Electron's Zoom In key is Ctrl/Cmd and +, which needs Shift on most
+    // keyboards: accept Ctrl/Cmd and = too, as browsers do.
+    { role: 'zoomIn', accelerator: 'CommandOrControl+=' },
+    { role: 'zoomIn', accelerator: 'CommandOrControl+Plus', visible: false },
+    { role: 'zoomOut' },
+    { type: 'separator' },
+    { role: 'togglefullscreen' },
+  ]
+  if (isDev) items.push({ type: 'separator' }, { role: 'reload' }, { role: 'forceReload' }, { role: 'toggleDevTools' })
+  return items
+}
+
+// Electron's Window menu has a Zoom item that only works on macOS, where it
+// maximizes the window. Windows and Linux get Maximize instead.
+function windowSubmenu(): MenuItemConstructorOptions[] {
+  return [
+    { role: 'minimize' },
+    {
+      label: 'Maximize',
+      click: (_item, window) => {
+        if (window?.isMaximized()) window.unmaximize()
+        else window?.maximize()
+      },
+    },
+    { type: 'separator' },
+    { role: 'close' },
+  ]
 }
 
 app.whenReady().then(() => {
@@ -215,6 +260,10 @@ ipcMain.handle('start-processing', (_event, config: unknown) => {
 
 ipcMain.handle('cancel-processing', () => {
   cancelJob()
+})
+
+ipcMain.handle('exit-full-screen', () => {
+  mainWindow?.setFullScreen(false)
 })
 
 ipcMain.handle('select-folder', async () => {

@@ -156,6 +156,57 @@ func TestRunReportsProblemsInsteadOfFinishingSilently(t *testing.T) {
 	}
 }
 
+func TestRunStopsAtOnceWhenAToolCannotStart(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses shell scripts in place of ffmpeg and ffprobe")
+	}
+	// v0.1.0 for Apple Silicon shipped Homebrew's ffprobe, which macOS stops
+	// at launch on Macs without Homebrew's libraries. Every file failed with
+	// "signal: abort trap", and the summary said "0 errors".
+	for name, tc := range map[string]struct {
+		ffprobe []string
+		want    string
+	}{
+		"missing library": {
+			[]string{
+				`echo 'dyld[1]: Library not loaded: /opt/homebrew/lib/libavdevice.62.dylib' >&2`,
+				`echo "  Reason: tried: '/opt/homebrew/lib/libavdevice.62.dylib' (no such file)" >&2`,
+				"exit 134",
+			},
+			"Could not start ffprobe (dyld[1]: Library not loaded: /opt/homebrew/lib/libavdevice.62.dylib)",
+		},
+		"killed without a message": {[]string{"kill -KILL $$"}, "Could not start ffprobe (signal: killed)"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			touch(t, root, "src/20250510_151000.WAV")
+			bins := tools{
+				ffmpeg:  writeScript(t, root, "ffmpeg", "exit 0"),
+				ffprobe: writeScript(t, root, "ffprobe", tc.ffprobe...),
+			}
+			cfg := Config{SourceDir: filepath.Join(root, "src"), OutputDir: filepath.Join(root, "out"), TargetStep: 1}
+
+			done, events := runJob(t, context.Background(), cfg, bins)
+			if !strings.HasPrefix(done.Error, tc.want) {
+				t.Errorf("done.Error = %q, want it to start with %q", done.Error, tc.want)
+			}
+			if errs := logs(events, "error"); !slices.Equal(errs, []string{done.Error}) {
+				t.Errorf("error logs = %q, want only the start failure", errs)
+			}
+		})
+	}
+}
+
+// writeScript writes an executable shell script that stands in for a tool.
+func writeScript(t *testing.T, dir, name string, lines ...string) string {
+	t.Helper()
+	path := filepath.Join(dir, name)
+	if err := os.WriteFile(path, []byte("#!/bin/sh\n"+strings.Join(lines, "\n")+"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
 func TestRunCountsUnreadableFilesAsErrors(t *testing.T) {
 	bins := requireFFmpeg(t)
 	root := t.TempDir()

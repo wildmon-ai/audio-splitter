@@ -70,12 +70,28 @@ func isFile(path string) bool {
 	return err == nil && info.Mode().IsRegular()
 }
 
-// check fails early when ffmpeg or ffprobe cannot run at all, instead of
-// reporting the same error for every file.
-func (t tools) check() error {
+// check fails early when ffmpeg or ffprobe is missing or cannot start, instead
+// of reporting the same error for every file. A tool that exists may still not
+// start: v0.1.0 for Apple Silicon shipped Homebrew's ffprobe, which needs
+// libraries most Macs do not have.
+func (t tools) check(ctx context.Context) error {
 	for _, bin := range []string{t.ffmpeg, t.ffprobe} {
+		name := filepath.Base(bin)
 		if _, err := exec.LookPath(bin); err != nil {
-			return fmt.Errorf("%s not found: it should come with the app, or be installed on this computer", filepath.Base(bin))
+			return fmt.Errorf("%s not found: it should come with the app, or be installed on this computer", name)
+		}
+		var stderr bytes.Buffer
+		cmd := exec.CommandContext(ctx, bin, "-version")
+		cmd.Stderr = &stderr
+		if err := cmd.Run(); err != nil {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			// The first line names the cause, e.g. dyld's "Library not loaded: …".
+			if first, _, _ := strings.Cut(strings.TrimSpace(stderr.String()), "\n"); first != "" {
+				err = errors.New(strings.TrimSpace(first))
+			}
+			return fmt.Errorf("could not start %s (%v): try reinstalling Audio Splitter, and report the problem if it continues", name, err)
 		}
 	}
 	return nil

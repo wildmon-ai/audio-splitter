@@ -64,7 +64,7 @@ func TestToolError(t *testing.T) {
 func requireFFmpeg(t *testing.T) tools {
 	t.Helper()
 	bins := tools{ffmpeg: "ffmpeg", ffprobe: "ffprobe"}
-	if err := bins.check(); err != nil {
+	if err := bins.check(context.Background()); err != nil {
 		t.Skip("ffmpeg/ffprobe not installed")
 	}
 	return bins

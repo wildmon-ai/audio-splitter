@@ -75,10 +75,18 @@ jobs:
         run: |
           bash scripts/download-ffmpeg-macos.sh arm64
           bash scripts/download-ffmpeg-macos.sh x64
-          # Refuse binaries that need libraries the user's Mac may not have
-          # (Homebrew's ffmpeg, for example).
-          for f in resources/*/ffmpeg resources/*/ffprobe; do
-            if otool -L "$f" | tail -n +2 | grep -vE '^[[:space:]]*(/usr/lib/|/System/Library/)'; then
+          # Refuse binaries that need libraries the user's Mac may not have.
+          # v0.1.0 shipped Homebrew's ffprobe for Apple Silicon, and on Macs
+          # without Homebrew's ffmpeg every file failed with "signal: abort trap".
+          for f in resources/{arm64,x64}/{ffmpeg,ffprobe}; do
+            libs="$(otool -L "$f" | tail -n +2)"
+            # Every macOS program links libSystem: no match means otool could
+            # not read the file, which must not pass as "no outside libraries".
+            if ! grep -q '/usr/lib/libSystem.B.dylib' <<<"$libs"; then
+              echo "$f is missing or is not a macOS program" >&2
+              exit 1
+            fi
+            if grep -vE '^[[:space:]]*(/usr/lib/|/System/Library/)' <<<"$libs"; then
               echo "$f links to libraries outside macOS" >&2
               exit 1
             fi

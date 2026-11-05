@@ -17,4 +17,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onLog: (callback: (payload: unknown) => void) => subscribe('log', callback),
   onProgress: (callback: (payload: unknown) => void) => subscribe('progress', callback),
   onDone: (callback: (payload: unknown) => void) => subscribe('processing-done', callback),
+  exitFullScreen: () => ipcRenderer.invoke('exit-full-screen'),
+  onFullScreenChange: (callback: (payload: unknown) => void) => subscribe('full-screen-changed', callback),
 })

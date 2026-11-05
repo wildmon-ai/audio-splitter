@@ -8,6 +8,7 @@ import FolderPicker from './components/FolderPicker.vue'
 import ParameterForm from './components/ParameterForm.vue'
 import ProgressBar from './components/ProgressBar.vue'
 import LogPanel from './components/LogPanel.vue'
+import FullScreenExit from './components/FullScreenExit.vue'
 
 const store = useProcessingStore()
 
@@ -57,6 +58,7 @@ function start() {
 
 <template>
   <div class="min-h-screen bg-gray-100 flex flex-col">
+    <FullScreenExit />
 
     <!-- Header -->
     <header class="bg-[#0f1117] shadow-md">

@@ -9,6 +9,8 @@ interface ElectronAPI {
   onLog: (cb: (payload: LogPayload) => void) => Unsubscribe
   onProgress: (cb: (payload: ProgressPayload) => void) => Unsubscribe
   onDone: (cb: (payload: ProcessingDonePayload) => void) => Unsubscribe
+  exitFullScreen: () => Promise<void>
+  onFullScreenChange: (cb: (isFullScreen: boolean) => void) => Unsubscribe
 }
 
 declare global {
