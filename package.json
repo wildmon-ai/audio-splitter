@@ -9,32 +9,34 @@
   },
   "type": "module",
   "main": "dist-electron/main.js",
+  "packageManager": "pnpm@10.14.0",
   "scripts": {
     "build:electron": "tsc -p tsconfig.electron.json && node scripts/write-electron-package.cjs",
-    "dev": "pnpm build:backend && concurrently \"vite\" \"pnpm build:electron && wait-on http://localhost:1420 && electron .\"",
+    "dev": "pnpm build:backend && concurrently -k \"vite\" \"pnpm build:electron && wait-on http://localhost:1420 && electron .\"",
     "build": "vue-tsc --noEmit && vite build && pnpm build:electron",
     "build:backend": "node scripts/build-backend.cjs",
-    "dist": "pnpm build:backend && pnpm build && electron-builder",
+    "build:backend:release": "node scripts/build-backend.cjs --release",
+    "dist": "pnpm build:backend:release && pnpm build && electron-builder",
     "preview": "vite preview",
-    "test": "vitest run"
-  },
-  "dependencies": {
-    "pinia": "^2",
-    "vue": "^3.4"
+    "typecheck": "vue-tsc --noEmit && tsc -p tsconfig.electron.json --noEmit",
+    "test": "vitest run",
+    "test:go": "cd backend && go test ./..."
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4",
-    "@types/node": "^25.9.2",
+    "@types/node": "^24",
     "@vitejs/plugin-vue": "^5",
     "@vitest/ui": "^4.1.8",
     "concurrently": "^9",
-    "electron": "^36",
+    "electron": "^45",
     "electron-builder": "^26",
     "jsdom": "^29.1.1",
+    "pinia": "^2",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vite": "^6",
-    "vitest": "^2",
+    "vitest": "^4.1.8",
+    "vue": "^3.4",
     "vue-tsc": "^2",
     "wait-on": "^8"
   },
@@ -65,7 +67,7 @@
     ],
     "publish": {
       "provider": "github",
-      "releaseType": "release"
+      "releaseType": "draft"
     },
     "afterPack": "scripts/copy-backend.cjs",
     "linux": {

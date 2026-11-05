@@ -1,25 +1,21 @@
+// electron-builder afterPack hook. Copies the Go backend built for this
+// package's CPU (pnpm build:backend:release) into the app's resources, and
+// fails the build when ffmpeg/ffprobe were not bundled, instead of shipping
+// an app that cannot process anything.
 const fs = require('fs')
 const path = require('path')
 
-// electron-builder Arch enum: ia32=0, x64=1, armv7l=2, arm64=3, universal=4
-const ARCH_MAP = {
-  0: { goSuffix: '-x64' },
-  1: { goSuffix: '-x64' },
-  2: { goSuffix: '-armv7l' },
-  3: { goSuffix: '-arm64' },
-  4: { goSuffix: '-x64' },
-}
+// electron-builder's Arch enum, in order.
+const ARCH_NAMES = ['ia32', 'x64', 'armv7l', 'arm64', 'universal']
 
-exports.default = async function (context) {
+exports.default = async function copyBackend(context) {
+  const arch = ARCH_NAMES[context.arch]
   const platform = context.electronPlatformName
   const ext = platform === 'win32' ? '.exe' : ''
 
-  let src
-  if (platform === 'linux' || platform === 'darwin') {
-    const archInfo = ARCH_MAP[context.arch] || { goSuffix: '-x64' }
-    src = path.join(__dirname, '..', 'dist-backend', `audio-splitter-backend${archInfo.goSuffix}`)
-  } else {
-    src = path.join(__dirname, '..', 'dist-backend', `audio-splitter-backend${ext}`)
+  const src = path.join(__dirname, '..', 'dist-backend', `audio-splitter-backend-${arch}${ext}`)
+  if (!fs.existsSync(src)) {
+    throw new Error(`copy-backend: ${src} not found. Run "pnpm build:backend:release" first (${arch} is not built on this OS).`)
   }
 
   const resourcesDir =
@@ -27,11 +23,16 @@ exports.default = async function (context) {
       ? path.join(context.appOutDir, `${context.packager.appInfo.productFilename}.app`, 'Contents', 'Resources')
       : path.join(context.appOutDir, 'resources')
 
-  const dest = path.join(resourcesDir, `audio-splitter-backend${ext}`)
-  if (!fs.existsSync(src)) {
-    throw new Error(`copy-backend: source binary not found at ${src}`)
+  for (const tool of ['ffmpeg', 'ffprobe']) {
+    if (!fs.existsSync(path.join(resourcesDir, tool + ext))) {
+      throw new Error(
+        `copy-backend: ${tool}${ext} is not in the ${arch} package. Put it in resources/${arch}/ ` +
+          '(see scripts/download-ffmpeg*.sh).',
+      )
+    }
   }
-  fs.mkdirSync(path.dirname(dest), { recursive: true })
+
+  const dest = path.join(resourcesDir, `audio-splitter-backend${ext}`)
   fs.copyFileSync(src, dest)
   if (platform !== 'win32') fs.chmodSync(dest, 0o755)
 }

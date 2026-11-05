@@ -1,352 +1,196 @@
+// Command audio-splitter-backend cuts fixed-length clips out of long audio
+// recordings with ffmpeg. The Electron app drives it over stdio:
+//
+//	stdin:  one JSON command per line: {"cmd":"start","config":{...}} or {"cmd":"cancel"}
+//	stdout: one JSON event per line: "log", "progress" and "done"
+//
+// Every accepted start command ends with exactly one done event. Closing stdin
+// (or SIGINT/SIGTERM) cancels the running job, stops its ffmpeg processes and
+// exits.
 package main
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
-	"math"
+	"io"
 	"os"
-	"os/exec"
-	"path/filepath"
-	"regexp"
-	"runtime"
-	"strconv"
+	"os/signal"
 	"strings"
 	"sync"
-	"sync/atomic"
-	"time"
+	"syscall"
+	"unicode"
+	"unicode/utf8"
 )
-
-const sampleDuration = 60
-
-var audioExtensions = map[string]bool{
-	".wav": true, ".mp3": true, ".flac": true,
-	".ogg": true, ".m4a": true, ".opus": true,
-}
-
-var dateRe = regexp.MustCompile(`^(.*?)(\d{8}_\d{6})(.*)$`)
-
-var emitMu sync.Mutex
-
-func emit(obj any) {
-	b, _ := json.Marshal(obj)
-	emitMu.Lock()
-	os.Stdout.Write(b)
-	os.Stdout.Write([]byte{'\n'})
-	emitMu.Unlock()
-}
-
-func ffmpegBins() (string, string) {
-	ext := ""
-	if runtime.GOOS == "windows" {
-		ext = ".exe"
-	}
-	base := filepath.Dir(os.Args[0])
-	ffmpeg := filepath.Join(base, "ffmpeg"+ext)
-	if _, err := os.Stat(ffmpeg); err == nil {
-		return ffmpeg, filepath.Join(base, "ffprobe"+ext)
-	}
-	base = filepath.Join(filepath.Dir(os.Args[0]), "..", "resources")
-	ffmpeg = filepath.Join(base, "ffmpeg"+ext)
-	if _, err := os.Stat(ffmpeg); err == nil {
-		return ffmpeg, filepath.Join(base, "ffprobe"+ext)
-	}
-	return "ffmpeg" + ext, "ffprobe" + ext
-}
-
-func getDuration(ffprobe, filePath string) (float64, error) {
-	out, err := exec.Command(ffprobe,
-		"-i", filePath,
-		"-show_entries", "format=duration",
-		"-v", "quiet",
-		"-of", "csv=p=0",
-	).Output()
-	if err != nil {
-		return 0, err
-	}
-	return strconv.ParseFloat(strings.TrimSpace(string(out)), 64)
-}
-
-func cutClip(ffmpegBin, input, output string, offset int) error {
-	var stderr bytes.Buffer
-	cmd := exec.Command(ffmpegBin,
-		"-threads", "1",
-		"-i", input,
-		"-ss", strconv.Itoa(offset),
-		"-t", strconv.Itoa(sampleDuration),
-		"-y", "-vn", "-ac", "1",
-		output,
-	)
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		lines := strings.Split(strings.TrimSpace(stderr.String()), "\n")
-		return fmt.Errorf("%s", lines[len(lines)-1])
-	}
-	return nil
-}
-
-type parsedDate struct {
-	prefix string
-	t      time.Time
-	suffix string
-}
-
-func parseDateFromName(stem string) *parsedDate {
-	m := dateRe.FindStringSubmatch(stem)
-	if m == nil {
-		return nil
-	}
-	t, err := time.Parse("20060102_150405", m[2])
-	if err != nil {
-		return nil
-	}
-	return &parsedDate{prefix: m[1], t: t, suffix: m[3]}
-}
-
-type clipTask struct {
-	input    string
-	output   string
-	offset   int
-	filename string
-}
-
-// planFile runs ffprobe and returns all clip tasks for one file.
-func planFile(ffprobeBin, filePath, sourceDir, outputDir string, recordStep, targetStep int) ([]clipTask, error) {
-	durSec, err := getDuration(ffprobeBin, filePath)
-	if err != nil {
-		return nil, err
-	}
-
-	filename := filepath.Base(filePath)
-	ext := filepath.Ext(filePath)
-	stem := strings.TrimSuffix(filename, ext)
-	parsed := parseDateFromName(stem)
-
-	relDir, _ := filepath.Rel(sourceDir, filepath.Dir(filePath))
-	outDir := filepath.Join(outputDir, relDir)
-	os.MkdirAll(outDir, 0o755)
-
-	audioStepSec := targetStep * 60
-	timeAdvance := time.Duration(targetStep*recordStep) * time.Minute
-
-	clipTime := time.Time{}
-	if parsed != nil {
-		clipTime = parsed.t
-	}
-
-	total := int(math.Ceil(durSec))
-	offset := 0
-	var tasks []clipTask
-
-	for offset < total {
-		var outName string
-		if parsed != nil {
-			outName = parsed.prefix + clipTime.Format("20060102_150405") + parsed.suffix + ext
-		} else {
-			outName = fmt.Sprintf("%s_%04dm%s", stem, offset/60, ext)
-		}
-		tasks = append(tasks, clipTask{
-			input:    filePath,
-			output:   filepath.Join(outDir, outName),
-			offset:   offset,
-			filename: filename,
-		})
-		offset += audioStepSec
-		if parsed != nil {
-			clipTime = clipTime.Add(timeAdvance)
-		}
-	}
-	return tasks, nil
-}
-
-func collectFiles(root string) ([]string, error) {
-	var files []string
-	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
-			return err
-		}
-		if audioExtensions[strings.ToLower(filepath.Ext(path))] {
-			files = append(files, path)
-		}
-		return nil
-	})
-	return files, err
-}
-
-var (
-	cancelFunc context.CancelFunc
-	cancelMu   sync.Mutex
-)
-
-func runProcessing(cfg map[string]any) {
-	cancelMu.Lock()
-	if cancelFunc != nil {
-		cancelFunc()
-	}
-	ctx, cancel := context.WithCancel(context.Background())
-	cancelFunc = cancel
-	cancelMu.Unlock()
-	startedAt := time.Now()
-
-	sourceDir, _ := cfg["source_dir"].(string)
-	outputDir, _ := cfg["output_dir"].(string)
-	recordStep := intVal(cfg, "record_step", 1)
-	targetStep := intVal(cfg, "target_step", 1)
-	numWorkers := intVal(cfg, "num_threads", 0)
-	if numWorkers < 1 {
-		numWorkers = runtime.NumCPU()
-	}
-
-	ffmpegBin, ffprobeBin := ffmpegBins()
-
-	files, err := collectFiles(sourceDir)
-	if err != nil || len(files) == 0 {
-		emit(map[string]any{"type": "done", "total_clips": 0, "skipped": 0, "errors": 0})
-		return
-	}
-
-	emit(map[string]any{"type": "log", "level": "info",
-		"message": fmt.Sprintf("Scanning %d files…", len(files))})
-
-	// Phase 1: plan all clips in parallel (ffprobe only)
-	type planResult struct {
-		tasks    []clipTask
-		filename string
-		err      error
-	}
-	planCh := make(chan planResult, len(files))
-	planSem := make(chan struct{}, numWorkers)
-	var planWg sync.WaitGroup
-
-	for _, f := range files {
-		planWg.Add(1)
-		planSem <- struct{}{}
-		go func(path string) {
-			defer planWg.Done()
-			defer func() { <-planSem }()
-			tasks, err := planFile(ffprobeBin, path, sourceDir, outputDir, recordStep, targetStep)
-			planCh <- planResult{tasks: tasks, filename: filepath.Base(path), err: err}
-		}(f)
-	}
-	planWg.Wait()
-	close(planCh)
-
-	var allTasks []clipTask
-	for r := range planCh {
-		if r.err != nil {
-			emit(map[string]any{"type": "log", "level": "error",
-				"message": fmt.Sprintf("✗ %s: %v", r.filename, r.err)})
-			continue
-		}
-		allTasks = append(allTasks, r.tasks...)
-	}
-
-	totalClips := len(allTasks)
-	if totalClips == 0 {
-		emit(map[string]any{"type": "done", "total_clips": 0, "skipped": 0, "errors": 0})
-		return
-	}
-
-	emit(map[string]any{"type": "log", "level": "info",
-		"message": fmt.Sprintf("%d clips planned across %d files — starting…", totalClips, len(files))})
-	emit(map[string]any{"type": "progress", "current": 0, "total": totalClips})
-
-	// Phase 2: worker pool processes clips
-	taskCh := make(chan clipTask, totalClips)
-	for _, t := range allTasks {
-		taskCh <- t
-	}
-	close(taskCh)
-
-	var (
-		doneClips   int64
-		skipped     int64
-		errors      int64
-		workerWg    sync.WaitGroup
-	)
-
-	for i := 0; i < numWorkers; i++ {
-		workerWg.Add(1)
-		go func() {
-			defer workerWg.Done()
-			for task := range taskCh {
-				select {
-				case <-ctx.Done():
-					return
-				default:
-				}
-
-				if _, err := os.Stat(task.output); err == nil {
-					atomic.AddInt64(&skipped, 1)
-					emit(map[string]any{"type": "log", "level": "info",
-						"message": fmt.Sprintf("⏭ skipped (already exists): %s", filepath.Base(task.output))})
-				} else if err := cutClip(ffmpegBin, task.input, task.output, task.offset); err != nil {
-					atomic.AddInt64(&errors, 1)
-					emit(map[string]any{"type": "log", "level": "error",
-						"message": fmt.Sprintf("✗ %s: %v", filepath.Base(task.output), err)})
-				} else {
-					atomic.AddInt64(&doneClips, 1)
-				}
-
-				done := atomic.LoadInt64(&doneClips) + atomic.LoadInt64(&skipped) + atomic.LoadInt64(&errors)
-				emit(map[string]any{"type": "progress", "current": int(done), "total": totalClips})
-			}
-		}()
-	}
-	workerWg.Wait()
-
-	elapsed := time.Since(startedAt).Round(time.Second)
-	mins := int(elapsed.Minutes())
-	secs := int(elapsed.Seconds()) % 60
-	emit(map[string]any{"type": "log", "level": "info",
-		"message": fmt.Sprintf("Ended in %dm %ds — %d clips extracted, %d skipped, %d errors",
-			mins, secs, doneClips, skipped, errors)})
-
-	emit(map[string]any{
-		"type":        "done",
-		"total_clips": doneClips,
-		"skipped":     skipped,
-		"errors":      errors,
-	})
-}
-
-func intVal(m map[string]any, key string, def int) int {
-	v, ok := m[key]
-	if !ok {
-		return def
-	}
-	switch n := v.(type) {
-	case float64:
-		return int(n)
-	case int:
-		return n
-	}
-	return def
-}
 
 func main() {
+	events := newEmitter(os.Stdout)
+	jobs := &jobRunner{events: events}
+
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-signals
+		jobs.shutdown()
+		os.Exit(0)
+	}()
+
 	scanner := bufio.NewScanner(os.Stdin)
+	scanner.Buffer(make([]byte, 64*1024), 4*1024*1024)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" {
 			continue
 		}
-		var cmd map[string]any
+		var cmd struct {
+			Cmd    string          `json:"cmd"`
+			Config json.RawMessage `json:"config"`
+		}
 		if err := json.Unmarshal([]byte(line), &cmd); err != nil {
+			events.log(levelError, "Ignored a malformed command: "+err.Error())
 			continue
 		}
-		switch cmd["cmd"] {
+		switch cmd.Cmd {
 		case "start":
-			cfg, _ := cmd["config"].(map[string]any)
-			go runProcessing(cfg)
+			jobs.start(cmd.Config)
 		case "cancel":
-			cancelMu.Lock()
-			if cancelFunc != nil {
-				cancelFunc()
-			}
-			cancelMu.Unlock()
+			jobs.cancel()
+		default:
+			events.log(levelError, "Ignored an unknown command: "+cmd.Cmd)
 		}
 	}
+	// stdin closed: the app is quitting.
+	jobs.shutdown()
+}
+
+// jobRunner runs at most one job at a time.
+type jobRunner struct {
+	events *emitter
+
+	mu        sync.Mutex
+	cancelJob context.CancelFunc // set while a job runs
+	closed    bool
+	wg        sync.WaitGroup
+}
+
+func (j *jobRunner) start(rawConfig json.RawMessage) {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	if j.closed {
+		return
+	}
+	if j.cancelJob != nil {
+		j.events.log(levelError, "A job is already running.")
+		return
+	}
+	cfg, err := parseConfig(rawConfig)
+	if err != nil {
+		j.events.send(j.events.fail(err))
+		return
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	j.cancelJob = cancel
+	j.wg.Add(1)
+	go func() {
+		defer j.wg.Done()
+		result := run(ctx, cfg, findTools(), j.events)
+		j.mu.Lock()
+		j.cancelJob = nil
+		j.mu.Unlock()
+		cancel()
+		// Sent after the job is cleared, so the app can start the next one
+		// as soon as it sees this event.
+		j.events.send(result)
+	}()
+}
+
+func (j *jobRunner) cancel() {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	if j.cancelJob != nil {
+		j.cancelJob()
+	}
+}
+
+// shutdown cancels the running job and waits until its ffmpeg processes are gone.
+func (j *jobRunner) shutdown() {
+	j.mu.Lock()
+	j.closed = true
+	if j.cancelJob != nil {
+		j.cancelJob()
+	}
+	j.mu.Unlock()
+	j.wg.Wait()
+}
+
+type level string
+
+const (
+	levelInfo  level = "info"
+	levelWarn  level = "warn"
+	levelError level = "error"
+)
+
+type logEvent struct {
+	Type    string `json:"type"`
+	Level   level  `json:"level"`
+	Message string `json:"message"`
+}
+
+type progressEvent struct {
+	Type    string `json:"type"`
+	Phase   string `json:"phase"` // "scan" while reading durations, then "clips"
+	Current int    `json:"current"`
+	Total   int    `json:"total"`
+}
+
+type doneEvent struct {
+	Type       string `json:"type"`
+	TotalClips int    `json:"total_clips"`
+	Skipped    int    `json:"skipped"`
+	Errors     int    `json:"errors"`
+	Cancelled  bool   `json:"cancelled,omitempty"`
+	Error      string `json:"error,omitempty"` // the job could not run at all
+}
+
+// emitter writes events as JSON lines. It is safe for concurrent use.
+type emitter struct {
+	mu sync.Mutex
+	w  io.Writer
+}
+
+func newEmitter(w io.Writer) *emitter {
+	return &emitter{w: w}
+}
+
+func (e *emitter) send(event any) {
+	line, err := json.Marshal(event)
+	if err != nil {
+		return
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	_, _ = e.w.Write(append(line, '\n'))
+}
+
+func (e *emitter) log(l level, message string) {
+	e.send(logEvent{Type: "log", Level: l, Message: message})
+}
+
+// fail logs an error that stops a job before any clip is cut and returns the
+// done event that reports it.
+func (e *emitter) fail(err error) doneEvent {
+	message := sentence(err.Error())
+	e.log(levelError, message)
+	return doneEvent{Type: "done", Error: message}
+}
+
+// sentence capitalizes a Go error string for display.
+func sentence(s string) string {
+	r, size := utf8.DecodeRuneInString(s)
+	if r == utf8.RuneError {
+		return s
+	}
+	return string(unicode.ToUpper(r)) + s[size:]
 }

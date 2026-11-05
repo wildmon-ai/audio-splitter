@@ -1,24 +1,20 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
+
+// Each on* function returns an unsubscribe function, so the page can remove
+// exactly the listeners it added, and nothing else.
+function subscribe(channel: string, callback: (payload: unknown) => void): () => void {
+  const listener = (_event: IpcRendererEvent, payload: unknown) => callback(payload)
+  ipcRenderer.on(channel, listener)
+  return () => {
+    ipcRenderer.removeListener(channel, listener)
+  }
+}
 
 contextBridge.exposeInMainWorld('electronAPI', {
-  startProcessing: (config: unknown) =>
-    ipcRenderer.invoke('start-processing', config),
-
-  cancelProcessing: () =>
-    ipcRenderer.invoke('cancel-processing'),
-
-  selectFolder: () =>
-    ipcRenderer.invoke('select-folder'),
-
-  onLog: (cb: (payload: { level: string; message: string }) => void) =>
-    ipcRenderer.on('log', (_event, payload) => cb(payload)),
-
-  onProgress: (cb: (payload: { current: number; total: number }) => void) =>
-    ipcRenderer.on('progress', (_event, payload) => cb(payload)),
-
-  onDone: (cb: (payload: { total_clips: number; skipped: number; errors: number }) => void) =>
-    ipcRenderer.on('processing-done', (_event, payload) => cb(payload)),
-
-  removeAllListeners: (channel: string) =>
-    ipcRenderer.removeAllListeners(channel),
+  startProcessing: (config: unknown) => ipcRenderer.invoke('start-processing', config),
+  cancelProcessing: () => ipcRenderer.invoke('cancel-processing'),
+  selectFolder: () => ipcRenderer.invoke('select-folder'),
+  onLog: (callback: (payload: unknown) => void) => subscribe('log', callback),
+  onProgress: (callback: (payload: unknown) => void) => subscribe('progress', callback),
+  onDone: (callback: (payload: unknown) => void) => subscribe('processing-done', callback),
 })

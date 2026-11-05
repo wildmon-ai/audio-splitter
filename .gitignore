@@ -18,11 +18,8 @@ __pycache__/
 # Go backend binary
 dist-backend/
 
-# ffmpeg binaries (downloaded at build time)
-resources/ffmpeg
-resources/ffprobe
-resources/ffmpeg.exe
-resources/ffprobe.exe
+# ffmpeg binaries, downloaded into resources/<arch>/ at build time
+resources/*
 !resources/.gitkeep
 
 # Environment

@@ -1,62 +1,126 @@
-import { app, BrowserWindow, ipcMain, dialog } from 'electron'
-import { spawn, ChildProcess } from 'child_process'
+import { app, BrowserWindow, ipcMain, dialog, Menu, shell, type MenuItemConstructorOptions } from 'electron'
+import { spawn, type ChildProcess } from 'child_process'
+import * as fs from 'fs'
 import * as path from 'path'
 import * as readline from 'readline'
 
 let mainWindow: BrowserWindow | null = null
-let backendProcess: ChildProcess | null = null
+let helpWindow: BrowserWindow | null = null
+let backend: ChildProcess | null = null
+let jobRunning = false
 
 const isDev = !app.isPackaged
+const isMac = process.platform === 'darwin'
+const DEV_SERVER_URL = 'http://localhost:1420'
+const REPO_URL = 'https://github.com/wildmon-ai/audio-splitter'
 
-function getBackendCommand(): { cmd: string; args: string[] } {
-  const ext = process.platform === 'win32' ? '.exe' : ''
-  if (isDev) {
-    return {
-      cmd: path.join(__dirname, '..', 'dist-backend', `audio-splitter-backend${ext}`),
-      args: [],
-    }
+function backendPath(): string {
+  const exe = `audio-splitter-backend${process.platform === 'win32' ? '.exe' : ''}`
+  return isDev ? path.join(__dirname, '..', 'dist-backend', exe) : path.join(process.resourcesPath, exe)
+}
+
+function sendToRenderer(channel: string, payload: unknown) {
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(channel, payload)
+}
+
+// The page waits for 'processing-done' after every start. If the backend dies
+// mid-job, send one, so the page does not stay on "Processing…" forever.
+function failRunningJob(message: string) {
+  if (!jobRunning) return
+  jobRunning = false
+  sendToRenderer('log', { level: 'error', message })
+  sendToRenderer('processing-done', { total_clips: 0, skipped: 0, errors: 0, error: message })
+}
+
+function forwardBackendEvent(line: string) {
+  let event: Record<string, unknown>
+  try {
+    event = JSON.parse(line)
+  } catch {
+    return // not an event
   }
-  return {
-    cmd: path.join(process.resourcesPath, `audio-splitter-backend${ext}`),
-    args: [],
+  switch (event.type) {
+    case 'log':
+      sendToRenderer('log', { level: event.level, message: event.message })
+      break
+    case 'progress':
+      sendToRenderer('progress', { phase: event.phase, current: event.current, total: event.total })
+      break
+    case 'done':
+      jobRunning = false
+      sendToRenderer('processing-done', {
+        total_clips: event.total_clips,
+        skipped: event.skipped,
+        errors: event.errors,
+        cancelled: event.cancelled === true,
+        error: event.error,
+      })
+      break
   }
 }
 
-function spawnBackend(): ChildProcess {
-  const { cmd, args } = getBackendCommand()
-  const proc = spawn(cmd, args, { stdio: ['pipe', 'pipe', 'inherit'], windowsHide: true })
-
-  const rl = readline.createInterface({ input: proc.stdout! })
-  rl.on('line', (line) => {
-    if (!mainWindow || !line.trim()) return
-    try {
-      const payload = JSON.parse(line)
-      if (payload.type === 'log') {
-        mainWindow.webContents.send('log', { level: payload.level, message: payload.message })
-      } else if (payload.type === 'progress') {
-        mainWindow.webContents.send('progress', { current: payload.current, total: payload.total })
-      } else if (payload.type === 'done') {
-        mainWindow.webContents.send('processing-done', {
-          total_clips: payload.total_clips,
-          skipped: payload.skipped,
-          errors: payload.errors,
-        })
-      }
-    } catch {
-      // ignore malformed lines
-    }
+function startBackend(): ChildProcess {
+  const cmd = backendPath()
+  if (!fs.existsSync(cmd)) {
+    throw new Error(
+      isDev
+        ? `Processing engine not found at ${cmd}. Run "pnpm build:backend".`
+        : 'The processing engine is missing. Please reinstall Audio Splitter.',
+    )
+  }
+  const proc = spawn(cmd, [], { stdio: ['pipe', 'pipe', 'inherit'], windowsHide: true })
+  // Writing to a backend that just died fails with EPIPE; 'exit' reports it.
+  proc.stdin?.on('error', () => {})
+  proc.on('error', (err) => {
+    if (backend === proc) backend = null
+    failRunningJob(`The processing engine could not run: ${err.message}`)
   })
-
-  proc.on('exit', (code) => {
-    if (code !== 0 && code !== null && mainWindow) {
-      mainWindow.webContents.send('log', {
-        level: 'error',
-        message: `Backend process exited with code ${code}`,
-      })
-    }
+  proc.on('exit', (code, signal) => {
+    if (backend === proc) backend = null
+    failRunningJob(`The processing engine stopped unexpectedly (${signal ?? `exit code ${code}`}).`)
   })
-
+  readline.createInterface({ input: proc.stdout! }).on('line', forwardBackendEvent)
   return proc
+}
+
+function sendToBackend(command: object) {
+  // Started on demand, so it comes back after a crash, and after macOS closed
+  // the last window (which stops it) and the app is reopened from the dock.
+  backend ??= startBackend()
+  backend.stdin!.write(JSON.stringify(command) + '\n')
+}
+
+function cancelJob() {
+  if (backend && jobRunning) sendToBackend({ cmd: 'cancel' })
+}
+
+// Closing stdin makes the backend cancel its job, stop ffmpeg and exit.
+function stopBackend() {
+  const proc = backend
+  if (!proc) return
+  backend = null
+  jobRunning = false
+  proc.stdin?.end()
+  const timer = setTimeout(() => proc.kill(), 5000)
+  timer.unref()
+  proc.once('exit', () => clearTimeout(timer))
+}
+
+function openExternally(url: string) {
+  if (url.startsWith('https://')) void shell.openExternal(url)
+}
+
+// The app's pages never navigate away; links open in the system browser.
+function keepNavigationInside(win: BrowserWindow) {
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    openExternally(url)
+    return { action: 'deny' }
+  })
+  win.webContents.on('will-navigate', (event) => {
+    if (event.url === win.webContents.getURL()) return // a reload
+    event.preventDefault()
+    openExternally(event.url)
+  })
 }
 
 function createWindow() {
@@ -69,12 +133,16 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: true,
     },
   })
+  keepNavigationInside(mainWindow)
+  // A reload (View → Reload) or a crashed page loses track of the job: stop it.
+  mainWindow.webContents.on('did-start-loading', cancelJob)
+  mainWindow.webContents.on('render-process-gone', cancelJob)
 
   if (isDev) {
-    mainWindow.loadURL('http://localhost:1420')
-    // mainWindow.webContents.openDevTools()
+    mainWindow.loadURL(DEV_SERVER_URL)
   } else {
     mainWindow.loadFile(path.join(__dirname, '..', 'dist', 'index.html'))
   }
@@ -82,33 +150,87 @@ function createWindow() {
   mainWindow.on('closed', () => { mainWindow = null })
 }
 
+function openHelpWindow() {
+  if (helpWindow) {
+    helpWindow.focus()
+    return
+  }
+  helpWindow = new BrowserWindow({
+    width: 640,
+    height: 720,
+    title: 'Audio Splitter — Help',
+    parent: mainWindow ?? undefined,
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  })
+  helpWindow.removeMenu()
+  keepNavigationInside(helpWindow)
+
+  if (isDev) {
+    helpWindow.loadURL(`${DEV_SERVER_URL}/help.html`)
+  } else {
+    helpWindow.loadFile(path.join(__dirname, '..', 'dist', 'help.html'))
+  }
+  helpWindow.on('closed', () => { helpWindow = null })
+}
+
+// Same menus as Electron's default, but with an app-specific Help menu
+// instead of the default links to the Electron website.
+function buildMenu(): Menu {
+  const helpSubmenu: MenuItemConstructorOptions[] = [
+    { label: 'How to Use Audio Splitter', accelerator: 'F1', click: () => openHelpWindow() },
+    { label: 'Report an Issue…', click: () => openExternally(`${REPO_URL}/issues`) },
+  ]
+  if (!isMac) helpSubmenu.push({ type: 'separator' }, { role: 'about' })
+
+  const template: MenuItemConstructorOptions[] = [
+    { role: 'fileMenu' },
+    { role: 'editMenu' },
+    { role: 'viewMenu' },
+    { role: 'windowMenu' },
+    { role: 'help', submenu: helpSubmenu },
+  ]
+  if (isMac) template.unshift({ role: 'appMenu' })
+  return Menu.buildFromTemplate(template)
+}
+
 app.whenReady().then(() => {
-  backendProcess = spawnBackend()
+  app.setAboutPanelOptions({
+    applicationName: 'Audio Splitter',
+    applicationVersion: app.getVersion(),
+    website: REPO_URL,
+  })
+  Menu.setApplicationMenu(buildMenu())
   createWindow()
 })
 
 ipcMain.handle('start-processing', (_event, config: unknown) => {
-  if (!backendProcess?.stdin?.writable) return
-  backendProcess.stdin.write(JSON.stringify({ cmd: 'start', config }) + '\n')
+  if (jobRunning) throw new Error('A job is already running.')
+  sendToBackend({ cmd: 'start', config })
+  jobRunning = true
 })
 
 ipcMain.handle('cancel-processing', () => {
-  if (!backendProcess?.stdin?.writable) return
-  backendProcess.stdin.write(JSON.stringify({ cmd: 'cancel' }) + '\n')
+  cancelJob()
 })
 
 ipcMain.handle('select-folder', async () => {
   if (!mainWindow) return null
   const result = await dialog.showOpenDialog(mainWindow, {
-    properties: ['openDirectory'],
+    properties: ['openDirectory', 'createDirectory'],
   })
   return result.canceled ? null : result.filePaths[0]
 })
 
 app.on('window-all-closed', () => {
-  backendProcess?.kill()
-  if (process.platform !== 'darwin') app.quit()
+  stopBackend()
+  if (!isMac) app.quit()
 })
+
+app.on('before-quit', stopBackend)
 
 app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) createWindow()

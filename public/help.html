@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'" />
+    <title>Audio Splitter — Help</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #1f2937;
+        --muted: #4b5563;
+        --line: #e5e7eb;
+        --page: #f3f4f6;
+        --accent: #2563eb;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--page);
+        color: var(--ink);
+        font: 14px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      }
+      header { background: #0f1117; padding: 16px 24px; }
+      header h1 { margin: 0; color: #fff; font-size: 16px; font-weight: 600; line-height: 1.3; }
+      header p { margin: 2px 0 0; color: #94a3b8; font-size: 12px; }
+      main { max-width: 720px; margin: 0 auto; padding: 24px; display: flex; flex-direction: column; gap: 16px; }
+      section {
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        box-shadow: 0 1px 2px rgb(0 0 0 / 0.05);
+        padding: 16px 20px;
+      }
+      h2 {
+        margin: 0 0 8px;
+        font-size: 13px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+      p, ol, ul, dl { margin: 0 0 8px; }
+      p:last-child, ol:last-child, ul:last-child, dl:last-child { margin-bottom: 0; }
+      ol, ul { padding-left: 20px; }
+      li + li { margin-top: 2px; }
+      dt { font-weight: 600; }
+      dd { margin: 0 0 10px; color: var(--muted); }
+      dd:last-child { margin-bottom: 0; }
+      code {
+        font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        background: var(--page);
+        border-radius: 4px;
+        padding: 1px 5px;
+        overflow-wrap: anywhere;
+      }
+      .tip { background: #fffbeb; border-color: #fde68a; }
+      .tip h2 { color: #92400e; }
+      .footer { margin: 0; color: var(--muted); font-size: 13px; text-align: center; }
+      a { color: var(--accent); }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Audio Splitter — Help</h1>
+      <p>Wildmon · Batch audio processing</p>
+    </header>
+
+    <main>
+      <section>
+        <h2>What it does</h2>
+        <p>
+          Audio Splitter cuts samples out of long field recordings. For every audio file in the
+          <b>Source Folder</b> (subfolders included), it extracts one <b>1-minute clip every N minutes</b>
+          and saves the clips in the <b>Output Folder</b>, keeping the same subfolder structure.
+        </p>
+        <p>
+          A clip is only made when a full minute of audio is left, so a recording never ends with a short or
+          empty clip. Clips are mono and keep the file type of the original recording (and the bit depth of
+          WAV and FLAC files). Supported files: WAV, FLAC, MP3, OGG, M4A and OPUS.
+        </p>
+      </section>
+
+      <section>
+        <h2>Quick start</h2>
+        <ol>
+          <li>Choose the <b>Source Folder</b> with your recordings.</li>
+          <li>Choose an empty <b>Output Folder</b> outside the Source Folder.</li>
+          <li>Set <b>Extract Every N Minutes</b>.</li>
+          <li>Click <b>Start Processing</b> and follow the progress bar and the log.</li>
+        </ol>
+      </section>
+
+      <section>
+        <h2>Settings</h2>
+        <dl>
+          <dt>Extract Every N Minutes</dt>
+          <dd>
+            Time between the start of one clip and the start of the next. With N = 10, a 60-minute
+            recording gives 6 clips, starting at minutes 0, 10, 20, 30, 40 and 50. Use 1 or more.
+          </dd>
+          <dt>Parallel Processes</dt>
+          <dd>
+            How many clips are cut at the same time. <code>0</code> means automatic (one per CPU core).
+            Use a lower number if the computer becomes slow, or if the recordings are on a USB drive or SD card.
+          </dd>
+        </dl>
+      </section>
+
+      <section>
+        <h2>Clip names</h2>
+        <p>
+          If the file name contains the recording start time as <code>YYYYMMDD_HHMMSS</code>, each clip is
+          named with its own start time. With N = 10, <code>SITE01_20240601_060000.wav</code> gives
+          <code>SITE01_20240601_060000.wav</code>, <code>SITE01_20240601_061000.wav</code>,
+          <code>SITE01_20240601_062000.wav</code>, …
+        </p>
+        <p>
+          Otherwise, clips are named after their position in the recording, in minutes:
+          <code>recording_0000m.wav</code>, <code>recording_0010m.wav</code>, …
+        </p>
+      </section>
+
+      <section>
+        <h2>Stopping and resuming</h2>
+        <p>
+          <b>Cancel</b> stops the job right away. A clip is only saved once it is complete, so stopping never
+          leaves half-written clips behind.
+        </p>
+        <p>
+          Clips that already exist in the Output Folder are skipped and counted as "skipped" in the summary,
+          so running again with the same folders continues where it stopped. Incomplete clips left by older
+          versions are made again. To redo a clip yourself, delete it from the Output Folder first.
+        </p>
+      </section>
+
+      <section class="tip">
+        <h2>Tips</h2>
+        <ul>
+          <li>
+            The Output Folder cannot be the Source Folder. If it is inside it, Audio Splitter leaves it out
+            when looking for recordings.
+          </li>
+          <li>
+            Hidden files, the <code>._</code> files macOS leaves on memory cards and system folders are ignored.
+            A folder that cannot be opened is skipped with a warning in the log.
+          </li>
+          <li>If a file cannot be read, the error appears in the log and the other files keep going.</li>
+          <li>
+            If two recordings overlap in time and would produce clips with the same name, only the first is
+            kept and the log says so.
+          </li>
+        </ul>
+      </section>
+
+      <p class="footer">
+        Found a problem?
+        <a href="https://github.com/wildmon-ai/audio-splitter/issues" target="_blank" rel="noreferrer">Report it on GitHub</a>.
+      </p>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call: # run by release.yml before building installers
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [ubuntu-22.04, windows-latest, macos-latest]
+    runs-on: ${{ matrix.platform }}
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm # version from "packageManager" in package.json
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache: false # no Go dependencies
+
+      # The backend tests run the real ffmpeg. Fetching it with the release
+      # scripts also checks, on every push, that those scripts still work.
+      - name: Cache ffmpeg
+        uses: actions/cache@v4
+        with:
+          path: resources
+          key: ffmpeg-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/download-ffmpeg*') }}
+
+      - name: Download ffmpeg (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          [ -x resources/x64/ffmpeg ] || bash scripts/download-ffmpeg.sh x64
+          echo "$PWD/resources/x64" >> "$GITHUB_PATH"
+
+      - name: Download ffmpeg (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          [ -x resources/arm64/ffmpeg ] || bash scripts/download-ffmpeg-macos.sh arm64
+          echo "$PWD/resources/arm64" >> "$GITHUB_PATH"
+
+      - name: Download ffmpeg (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (-not (Test-Path resources\x64\ffmpeg.exe)) { ./scripts/download-ffmpeg-windows.ps1 }
+          "$PWD\resources\x64" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type-check
+        run: pnpm typecheck
+
+      - name: Frontend tests
+        run: pnpm test
+
+      - name: Backend checks and tests
+        working-directory: backend
+        shell: bash
+        run: |
+          go vet ./...
+          if [ "$RUNNER_OS" = Linux ]; then
+            unformatted="$(gofmt -l .)"
+            if [ -n "$unformatted" ]; then echo "Not gofmt-formatted: $unformatted" >&2; exit 1; fi
+            go test -race ./...
+          else
+            go test ./...
+          fi
+
+      - name: Cross-compile the release backends
+        run: pnpm build:backend:release

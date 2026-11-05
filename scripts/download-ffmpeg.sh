@@ -1,32 +1,45 @@
 #!/usr/bin/env bash
-set -e
+# Downloads static Linux ffmpeg/ffprobe into resources/<arch>/, where
+# electron-builder (extraResources) and the backend in development look.
+#
+# Usage: scripts/download-ffmpeg.sh [x64|arm64|armv7l]   (default x64; "amd64" means x64)
+set -euo pipefail
 
-# Usage: download-ffmpeg.sh [amd64|arm64|armv7l]
-ARCH="${1:-amd64}"
-
+ARCH="${1:-x64}"
 case "$ARCH" in
-  amd64)  JVNAME="amd64" ;;
-  arm64)  JVNAME="arm64" ;;
-  armv7l) JVNAME="armhf" ;;
+  x64 | amd64) ARCH=x64 JV=amd64 ;;
+  arm64) JV=arm64 ;;
+  armv7l | armhf) ARCH=armv7l JV=armhf ;;
   *)
-    echo "Unknown arch: $ARCH (use amd64, arm64, or armv7l)" >&2
+    echo "Unknown arch: $ARCH (use x64, arm64 or armv7l)" >&2
     exit 1
     ;;
 esac
 
-mkdir -p "resources/$ARCH"
+cd "$(dirname "$0")/.."
+DEST="resources/$ARCH"
+URL="https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-${JV}-static.tar.xz"
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
 
-url="https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-${JVNAME}-static.tar.xz"
-archive="/tmp/ffmpeg-${ARCH}.tar.xz"
+fetch() {
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsSL -A "Mozilla/5.0" "$1" -o "$2"
+  else
+    wget -q "$1" -O "$2"
+  fi
+}
 
-if command -v curl >/dev/null 2>&1; then
-  curl -L --fail --silent --show-error -A "Mozilla/5.0" "$url" -o "$archive"
-else
-  wget -q "$url" -O "$archive"
+fetch "$URL" "$TMP/ffmpeg.tar.xz"
+fetch "$URL.md5" "$TMP/ffmpeg.tar.xz.md5"
+expected="$(cut -d' ' -f1 <"$TMP/ffmpeg.tar.xz.md5")"
+actual="$(md5sum "$TMP/ffmpeg.tar.xz" | cut -d' ' -f1)"
+if [ "$expected" != "$actual" ]; then
+  echo "Checksum mismatch for $URL (expected $expected, got $actual)" >&2
+  exit 1
 fi
 
-tar -xf "$archive" -C /tmp/
-cp /tmp/ffmpeg-*-${JVNAME}-static/ffmpeg  "resources/$ARCH/ffmpeg"
-cp /tmp/ffmpeg-*-${JVNAME}-static/ffprobe "resources/$ARCH/ffprobe"
-chmod +x "resources/$ARCH/ffmpeg" "resources/$ARCH/ffprobe"
-echo "Done: ffmpeg and ffprobe in resources/$ARCH/"
+tar -xJf "$TMP/ffmpeg.tar.xz" -C "$TMP"
+mkdir -p "$DEST"
+install -m 755 "$TMP"/ffmpeg-*-static/ffmpeg "$TMP"/ffmpeg-*-static/ffprobe "$DEST/"
+echo "Done: ffmpeg and ffprobe in $DEST/"

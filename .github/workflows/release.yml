@@ -1,25 +1,34 @@
 name: Release
 
+# Builds the installers for every OS and CPU in package.json ("build" targets):
+#   Linux    x64, arm64, armv7l  AppImage + deb  (ubuntu runner)
+#   macOS    x64, arm64          dmg             (macos runner)
+#   Windows  x64                 nsis            (windows runner)
+# Each package bundles the Go backend and ffmpeg/ffprobe for its own CPU.
+# scripts/copy-backend.cjs fails the build when either one is missing.
+
 on:
   push:
     tags:
       - 'v*'
 
+permissions:
+  contents: read
+
 jobs:
+  test:
+    uses: ./.github/workflows/ci.yml
+
   create-release:
+    needs: test
     permissions:
       contents: write
     runs-on: ubuntu-latest
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
-      - uses: actions/checkout@v4
-      - name: Create GitHub release
-        run: |
-          gh release create "$GITHUB_REF_NAME" \
-            --title "$GITHUB_REF_NAME" \
-            --notes "" \
-            --latest
+      # A draft until every platform has uploaded its installers (see
+      # publish-release), so a failed build never shows up as the latest release.
+      - name: Create draft release
+        run: gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft --title "$GITHUB_REF_NAME" --notes ""
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -30,11 +39,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - platform: ubuntu-22.04
-          - platform: windows-latest
-          - platform: macos-latest
-
+        platform: [ubuntu-22.04, windows-latest, macos-latest]
     runs-on: ${{ matrix.platform }}
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -42,10 +47,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup pnpm
+      - name: Setup pnpm # version from "packageManager" in package.json
         uses: pnpm/action-setup@v4
-        with:
-          version: 9
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -57,57 +60,72 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: backend/go.mod
+          cache: false # no Go dependencies
 
+      # ffmpeg for every CPU this runner packages, in resources/<arch>/.
       - name: Download ffmpeg (Linux)
-        if: matrix.platform == 'ubuntu-22.04'
+        if: runner.os == 'Linux'
         run: |
-          bash scripts/download-ffmpeg.sh amd64
+          bash scripts/download-ffmpeg.sh x64
           bash scripts/download-ffmpeg.sh arm64
           bash scripts/download-ffmpeg.sh armv7l
 
       - name: Download ffmpeg (macOS)
-        if: matrix.platform == 'macos-latest'
+        if: runner.os == 'macOS'
         run: |
-          mkdir -p resources/arm64 resources/x64
-          brew install ffmpeg
-          cp "$(brew --prefix)/bin/ffmpeg"  resources/arm64/ffmpeg
-          cp "$(brew --prefix)/bin/ffprobe" resources/arm64/ffprobe
-          # download x64 static build for cross-packaging
-          curl -L "https://evermeet.cx/ffmpeg/getrelease/ffmpeg/zip" -o /tmp/ffmpeg-x64.zip
-          curl -L "https://evermeet.cx/ffmpeg/getrelease/ffprobe/zip" -o /tmp/ffprobe-x64.zip
-          unzip -o /tmp/ffmpeg-x64.zip -d resources/x64/
-          unzip -o /tmp/ffprobe-x64.zip -d resources/x64/
+          bash scripts/download-ffmpeg-macos.sh arm64
+          bash scripts/download-ffmpeg-macos.sh x64
+          # Refuse binaries that need libraries the user's Mac may not have
+          # (Homebrew's ffmpeg, for example).
+          for f in resources/*/ffmpeg resources/*/ffprobe; do
+            if otool -L "$f" | tail -n +2 | grep -vE '^[[:space:]]*(/usr/lib/|/System/Library/)'; then
+              echo "$f links to libraries outside macOS" >&2
+              exit 1
+            fi
+          done
 
       - name: Download ffmpeg (Windows)
-        if: matrix.platform == 'windows-latest'
+        if: runner.os == 'Windows'
         shell: pwsh
-        run: |
-          $url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
-          Invoke-WebRequest $url -OutFile ffmpeg.zip
-          Expand-Archive ffmpeg.zip -DestinationPath ffmpeg-tmp
-          New-Item -ItemType Directory -Force -Path resources\x64
-          Copy-Item ffmpeg-tmp\ffmpeg-master-latest-win64-gpl\bin\ffmpeg.exe resources\x64\ffmpeg.exe
-          Copy-Item ffmpeg-tmp\ffmpeg-master-latest-win64-gpl\bin\ffprobe.exe resources\x64\ffprobe.exe
+        run: ./scripts/download-ffmpeg-windows.ps1
 
       - name: Set version from tag
         shell: bash
-        run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          npm pkg set version="$VERSION"
+        run: npm pkg set version="${GITHUB_REF_NAME#v}"
 
-      - name: Install frontend dependencies
-        run: pnpm install
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
 
-      - name: Build app
-        run: pnpm build:backend && pnpm build
+      - name: Build
+        run: pnpm build:backend:release && pnpm build
 
-      - name: Package and publish
+      - name: Package and upload (Linux, Windows)
+        if: runner.os != 'macOS'
         run: pnpm exec electron-builder --publish always
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Only this job gets the Apple certificate: electron-builder would also
+      # use CSC_LINK to sign the Windows installer.
+      - name: Package, sign, notarize and upload (macOS)
+        if: runner.os == 'macOS'
+        run: pnpm exec electron-builder --publish always
+        env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_LINK: ${{ secrets.APPLE_CERTIFICATE_P12 }}
           CSC_KEY_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+  publish-release:
+    # Runs only when every platform succeeded.
+    needs: build
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish the release
+        run: gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false --latest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

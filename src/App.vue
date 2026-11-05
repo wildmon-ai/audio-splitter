@@ -1,6 +1,9 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useProcessingStore } from './stores/processing'
 import { usePersisted } from './composables/usePersisted'
+import { isString, isValidRecordStep, isValidTargetStep, isValidThreads } from './utils/validation'
+import { formatDuration } from './utils/format'
 import FolderPicker from './components/FolderPicker.vue'
 import ParameterForm from './components/ParameterForm.vue'
 import ProgressBar from './components/ProgressBar.vue'
@@ -8,13 +11,40 @@ import LogPanel from './components/LogPanel.vue'
 
 const store = useProcessingStore()
 
-const sourceDir = usePersisted('sourceDir', '')
-const outputDir = usePersisted('outputDir', '')
-const recordStep = usePersisted('recordStep', 1)
-const targetStep = usePersisted('targetStep', 10)
-const numThreads = usePersisted('numThreads', 0)
+const sourceDir = usePersisted('sourceDir', '', isString)
+const outputDir = usePersisted('outputDir', '', isString)
+const recordStep = usePersisted('recordStep', 1, isValidRecordStep)
+const targetStep = usePersisted('targetStep', 10, isValidTargetStep)
+const numThreads = usePersisted('numThreads', 0, isValidThreads)
+
+const canStart = computed(
+  () =>
+    !store.isRunning &&
+    sourceDir.value.trim() !== '' &&
+    outputDir.value.trim() !== '' &&
+    isValidTargetStep(targetStep.value) &&
+    isValidThreads(numThreads.value),
+)
+
+const result = computed(() => {
+  const s = store.summary
+  if (!s) return null
+  const elapsed = store.elapsedSeconds === null ? '' : ` · ${formatDuration(store.elapsedSeconds)}`
+  const counts = `${s.total_clips} clips extracted, ${s.skipped} skipped, ${s.errors} errors${elapsed}`
+  if (s.error) {
+    return { title: 'Failed.', detail: s.error, tone: 'border-red-200 bg-red-50 text-red-800', icon: 'text-red-500', ok: false }
+  }
+  if (s.cancelled) {
+    return { title: 'Cancelled.', detail: counts, tone: 'border-amber-200 bg-amber-50 text-amber-800', icon: 'text-amber-500', ok: false }
+  }
+  if (s.errors > 0) {
+    return { title: 'Done, with errors.', detail: counts, tone: 'border-amber-200 bg-amber-50 text-amber-800', icon: 'text-amber-500', ok: false }
+  }
+  return { title: 'Done.', detail: counts, tone: 'border-emerald-200 bg-emerald-50 text-emerald-800', icon: 'text-emerald-500', ok: true }
+})
 
 function start() {
+  if (!canStart.value) return
   store.start({
     source_dir: sourceDir.value,
     output_dir: outputDir.value,
@@ -63,7 +93,7 @@ function start() {
       <div class="flex items-center gap-3">
         <button
           @click="start"
-          :disabled="store.isRunning || !sourceDir || !outputDir"
+          :disabled="!canStart"
           class="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         >
           <svg v-if="store.isRunning" class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -77,13 +107,13 @@ function start() {
         </button>
         <button
           @click="store.cancel()"
-          :disabled="!store.isRunning"
+          :disabled="!store.isRunning || store.isCancelling"
           class="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-5 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         >
           <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
           </svg>
-          Cancel
+          {{ store.isCancelling ? 'Cancelling…' : 'Cancel' }}
         </button>
       </div>
 
@@ -95,6 +125,7 @@ function start() {
         <div class="px-6 py-5">
           <ProgressBar
             :progress="store.progress"
+            :percent="store.progressPercent"
             :is-running="store.isRunning"
             :current-message="store.logs[store.logs.length - 1]?.message"
             :elapsed-seconds="store.elapsedSeconds"
@@ -111,19 +142,17 @@ function start() {
       </section>
 
       <!-- Summary -->
-      <div v-if="store.summary" class="flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm text-emerald-800">
-        <svg class="mt-0.5 h-4 w-4 flex-shrink-0 text-emerald-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+      <div
+        v-if="result"
+        role="status"
+        class="flex items-start gap-3 rounded-xl border px-5 py-4 text-sm"
+        :class="result.tone"
+      >
+        <svg class="mt-0.5 h-4 w-4 flex-shrink-0" :class="result.icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path v-if="result.ok" stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+          <path v-else stroke-linecap="round" stroke-linejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
         </svg>
-        <span>
-          <strong>Done.</strong>
-          {{ store.summary.total_clips }} clips extracted,
-          {{ store.summary.skipped }} skipped,
-          {{ store.summary.errors }} errors
-          <span v-if="store.elapsedSeconds !== null">
-            · {{ Math.floor(store.elapsedSeconds / 60) }}m {{ store.elapsedSeconds % 60 }}s
-          </span>
-        </span>
+        <span><strong>{{ result.title }}</strong> {{ result.detail }}</span>
       </div>
 
     </main>
